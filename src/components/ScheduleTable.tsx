@@ -43,6 +43,30 @@ function isEmptyDutyValue(value: string): boolean {
   return !value || value === '-' || value.startsWith('당번 없음');
 }
 
+/** 병합된 셀: 스팬 전체의 changeNotes를 모아서 dot이 숨겨진 행의 로그도 표시 */
+function getMergedNotes(
+  rows: AssignmentRow[],
+  startIndex: number,
+  span: number | undefined,
+  duty: DutyType,
+): ChangeNote[] | undefined {
+  if (!span || span < 2) {
+    return rows[startIndex]?.changeNotes[duty];
+  }
+  const seen = new Set<string>();
+  const result: ChangeNote[] = [];
+  for (let i = 0; i < span; i++) {
+    const row = rows[startIndex + i];
+    for (const note of row?.changeNotes[duty] ?? []) {
+      if (!seen.has(note.logId)) {
+        seen.add(note.logId);
+        result.push(note);
+      }
+    }
+  }
+  return result.length ? result : undefined;
+}
+
 function buildDutyMergeMeta(rows: AssignmentRow[], duty: DutyType): DutyMergeMeta {
   const startRowSpan = new Map<number, number>();
   const hiddenRows = new Set<number>();
@@ -455,7 +479,7 @@ export default function ScheduleTable({
                       rowSpan,
                       onDutyClick,
                       onUndoChange,
-                      row.changeNotes[duty],
+                      getMergedNotes(rows, index, rowSpan, duty) ?? row.changeNotes[duty],
                       row.changedPeople[duty],
                       searchQuery,
                     );
@@ -484,7 +508,7 @@ export default function ScheduleTable({
                           onDutyClick(row, duty, row.assignments[duty]);
                         }
                       }}
-                      notes={row.changeNotes[duty]}
+                      notes={getMergedNotes(rows, index, rowSpan, duty) ?? row.changeNotes[duty]}
                       onUndoChange={onUndoChange}
                     />
                   );
