@@ -653,7 +653,7 @@ export default function App() {
               교환 취소
             </button>
           )}
-          {canEdit && (
+          {isAdmin && (
             <>
               <button type="button" onClick={handleOpenDateModal}>
                 날짜 수정
@@ -661,11 +661,10 @@ export default function App() {
               <button type="button" onClick={handleOpenRosterModal}>
                 명단 수정
               </button>
-              {isAdmin && (
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => {
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
                     const confirmed = window.confirm(`${currentYear}년도 데이터를 삭제하시겠습니까?`);
                     if (!confirmed) return;
                     tryAcquireAndRun(() => {
@@ -680,7 +679,6 @@ export default function App() {
                 >
                   연도 삭제
                 </button>
-              )}
             </>
           )}
         </div>
@@ -689,7 +687,7 @@ export default function App() {
       {data.schedule.length === 0 ? (
         <EmptyState
           onOpenDateModal={handleOpenDateModal}
-          canEdit={canEdit}
+          canEdit={isAdmin}
         />
       ) : (
         <>
