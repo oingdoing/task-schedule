@@ -45,9 +45,13 @@ CREATE TABLE edit_lock (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
--- RLS 정책 (공개 읽기, 인증된 사용자만 쓰기 등 필요에 맞게 조정)
 ALTER TABLE schedule_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE edit_lock ENABLE ROW LEVEL SECURITY;
+
+-- RLS 정책: schedule_data 공개 읽기/쓰기 (개발용)
+CREATE POLICY "Allow public read" ON schedule_data FOR SELECT USING (true);
+CREATE POLICY "Allow public insert" ON schedule_data FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON schedule_data FOR UPDATE USING (true);
 ```
 
 ### 1-3. 프론트엔드 수정
@@ -187,3 +191,78 @@ await setDoc(ref, { data: newData, version: version + 1, updatedAt: serverTimest
 7. (선택) 실시간 구독으로 자동 갱신
 
 이 순서대로 적용하면, 여러 사용자가 같은 일정을 공유할 수 있습니다.
+
+---
+
+## 6. (추후 보완) version 기반 충돌 방지
+
+편집 잠금만으로는 **잠금 우회** 상황(예: 탭 여러 개, 장시간 방치 후 저장)에서 충돌이 발생할 수 있습니다. 이 경우 version 기반 낙관적 잠금으로 보완할 수 있습니다.
+
+### 6-1. 동작 원리
+
+- 저장 시 **로드했던 version**과 함께 upsert
+- 서버에서 `WHERE version = {기대값}` 조건으로 update
+- version이 이미 변경됐으면 0 rows affected → 충돌로 판단
+- 클라이언트: 최신 데이터 다시 로드 후 사용자에게 안내
+
+### 6-2. schedule_data 테이블
+
+`schedule_data`에 `version` 컬럼이 이미 있다면 그대로 활용:
+
+```sql
+-- schedule_data.version 사용 (기존 스키마와 호환)
+```
+
+### 6-3. 구현 방법
+
+**옵션 A: RPC 함수로 처리**
+
+```sql
+-- upsert_schedule_data RPC: version 불일치 시 오류 반환
+CREATE OR REPLACE FUNCTION upsert_schedule_data(
+  p_document_id TEXT,
+  p_payload JSONB,
+  p_expected_version INTEGER
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_current INTEGER;
+  v_next INTEGER;
+BEGIN
+  SELECT version INTO v_current FROM schedule_data WHERE document_id = p_document_id;
+  v_next := COALESCE(v_current, 0) + 1;
+  IF v_current IS DISTINCT FROM p_expected_version THEN
+    RAISE EXCEPTION 'CONFLICT: version mismatch (expected %, found %)', p_expected_version, v_current;
+  END IF;
+  INSERT INTO schedule_data (document_id, payload, version, updated_at)
+  VALUES (p_document_id, p_payload, v_next, now())
+  ON CONFLICT (document_id) DO UPDATE SET
+    payload = EXCLUDED.payload, version = v_next, updated_at = now()
+  WHERE schedule_data.version = p_expected_version;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CONFLICT: version changed during update';
+  END IF;
+  RETURN jsonb_build_object('version', v_next);
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**옵션 B: 프론트에서 upsert + version 체크**
+
+- load 시 `{ data, version }` 저장
+- save 시 `version + 1`과 함께 upsert
+- PostgreSQL/Supabase에서는 `UPDATE ... WHERE version = ?` 후 `rowCount` 확인 필요
+- Supabase JS에서 직접 이를 구현하려면 RPC 쪽이 더 단순함
+
+### 6-4. App.tsx 수정 포인트
+
+1. `loadDataFromSupabase()`: 응답에 `version` 포함, state에 `loadedVersion` 보관
+2. 저장 함수: `upsert_schedule_data` RPC 호출 시 `p_expected_version` 전달
+3. 에러 처리: `CONFLICT` 또는 version mismatch 시
+   - "다른 사용자가 수정했습니다. 최신 내용을 불러옵니다." 안내
+   - `loadDataFromSupabase()`로 재로드 후 `setData(loaded)`
+
+### 6-5. 적용 우선순위
+
+- **편집 잠금**만 있어도 소규모 사용에는 충분
+- 사용자가 늘거나 동시 편집 가능성이 높아지면 version 기반 보완을 고려

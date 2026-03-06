@@ -1,47 +1,30 @@
 import { useState } from 'react';
 
-const ENTRY_STORAGE_KEY = 'duty-schedule-entry-v1';
-const ADMIN_FLAG_KEY = 'duty-schedule-admin-v1';
-
-export function getEntryState(): { passed: boolean; isAdmin: boolean } {
-  if (typeof window === 'undefined') {
-    return { passed: false, isAdmin: false };
-  }
-  const raw = sessionStorage.getItem(ENTRY_STORAGE_KEY);
-  const admin = sessionStorage.getItem(ADMIN_FLAG_KEY) === '1';
-  return { passed: raw === '1', isAdmin: raw === '1' && admin };
-}
-
-export function setEntryState(passed: boolean, isAdmin: boolean): void {
-  if (typeof window === 'undefined') return;
-  sessionStorage.setItem(ENTRY_STORAGE_KEY, passed ? '1' : '0');
-  sessionStorage.setItem(ADMIN_FLAG_KEY, isAdmin ? '1' : '0');
-}
-
 interface EntryGateProps {
-  documentCode: string;
-  onPass: (isAdmin: boolean) => void;
+  onCodeSubmit: (code: string) => Promise<void>;
+  error: string | null;
   onOpenAdminModal: () => void;
 }
 
 export default function EntryGate({
-  documentCode,
-  onPass,
+  onCodeSubmit,
+  error,
   onOpenAdminModal,
 }: EntryGateProps) {
   const [input, setInput] = useState('');
-  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim() !== documentCode) {
-      setError('문서 코드가 일치하지 않습니다.');
-      return;
+    const code = input.trim();
+    if (!code) return;
+    setSubmitting(true);
+    try {
+      await onCodeSubmit(code);
+      setInput('');
+    } finally {
+      setSubmitting(false);
     }
-    setError('');
-    setInput('');
-    setEntryState(true, false);
-    onPass(false);
   };
 
   return (
@@ -53,20 +36,21 @@ export default function EntryGate({
           <input
             type="text"
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setError('');
-            }}
+            onChange={(e) => setInput(e.target.value)}
             placeholder="문서 코드"
             autoFocus
+            disabled={submitting}
           />
           {error && <p className="text-error">{error}</p>}
-          <button type="submit">입장</button>
+          <button type="submit" disabled={submitting}>
+            {submitting ? '확인 중...' : '입장'}
+          </button>
         </form>
         <button
           type="button"
           className="entry-gate-admin-link"
           onClick={onOpenAdminModal}
+          disabled={submitting}
         >
           관리자로 입장하기
         </button>

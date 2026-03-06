@@ -1,34 +1,38 @@
 import { useState } from 'react';
-import { setEntryState } from './EntryGate';
 
 interface AdminCodeModalProps {
   isOpen: boolean;
-  expectedCode: string;
-  onConfirm: () => void;
+  onCodeSubmit: (code: string) => Promise<void>;
   onClose: () => void;
 }
 
 export default function AdminCodeModal({
   isOpen,
-  expectedCode,
-  onConfirm,
+  onCodeSubmit,
   onClose,
 }: AdminCodeModalProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim() !== expectedCode) {
-      setError('관리자 코드가 일치하지 않습니다.');
-      return;
-    }
+    const code = input.trim();
+    if (!code) return;
     setError('');
-    setInput('');
-    setEntryState(true, true);
-    onConfirm();
+    setSubmitting(true);
+    try {
+      await onCodeSubmit(code);
+      setInput('');
+      setError('');
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '관리자 코드가 일치하지 않습니다.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleClose = () => {
@@ -58,6 +62,7 @@ export default function AdminCodeModal({
               }}
               placeholder="관리자 코드"
               autoFocus
+              disabled={submitting}
             />
             {error && <p className="text-error">{error}</p>}
           </div>
@@ -65,7 +70,9 @@ export default function AdminCodeModal({
             <button type="button" onClick={handleClose} className="secondary">
               취소
             </button>
-            <button type="submit">확인</button>
+            <button type="submit" disabled={submitting}>
+              {submitting ? '확인 중...' : '확인'}
+            </button>
           </footer>
         </form>
       </div>

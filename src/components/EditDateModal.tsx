@@ -34,7 +34,7 @@ export default function EditDateModal({
     const newSlot = buildDefaultSlot(new Date(currentYear, 0, 1));
     setDraft((prev) => [newSlot, ...prev]);
     setNewSlotIds((prev) => new Set(prev).add(newSlot.id));
-  }, []);
+  }, [currentYear]);
 
   useEffect(() => {
     if (!isOpen) {

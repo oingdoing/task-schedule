@@ -26,8 +26,8 @@
 | 항목 | 내용 |
 |------|------|
 | **목적** | 스프레드시트를 대체하는 담당 일정 공유 웹사이트 |
-| **데이터** | localStorage 저장 (초기값: schedule.json) |
-| **연동** | 백엔드 없음, 브라우저 localStorage 사용 |
+| **데이터** | Supabase schedule_data 테이블 (document_id='default') |
+| **연동** | Supabase (PostgreSQL, RPC, RLS) |
 
 ---
 
@@ -37,7 +37,8 @@
 |------|------|
 | **프레임워크** | Vite + React + TypeScript |
 | **스타일** | CSS |
-| **데이터 저장** | `localStorage` (키: `duty-schedule-data-v1`) |
+| **데이터 저장** | Supabase (schedule_data, documents, document_access) |
+| **환경 변수** | VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY |
 | **배포** | 정적 사이트 (Vercel, Netlify 등) |
 
 ---
@@ -60,7 +61,8 @@
 
 - **담당자 검색**: 편집 영역
 - **교환 취소**: 교환 대상 선택 모드 해제 (확인 전)
-- **날짜 수정·명단 수정·연도 삭제**: 관리자 모드에서만 노출
+- **날짜 수정·명단 수정**: editor/admin 둘 다 노출
+- **연도 삭제**: admin만 노출
 - **사용 방법**: 헤더 우측, 항상 노출
 
 ### 3.2 담당자 교환
@@ -291,15 +293,33 @@
 ### 9.1 입장 게이트
 
 - **최초 입장**: 문서 코드 입력 필요
-- **문서 코드**: App.tsx `DOCUMENT_CODE` 상수
-- **저장**: sessionStorage
+- **문서 코드**: `grant_document_access` RPC로 검증
+- **역할 부여**: editor 또는 admin 반환
+- **저장**: sessionStorage (documentId, role)
 
-### 9.2 관리자 모드
+### 9.2 역할별 권한
 
-- "관리자로 입장하기" 클릭 → 관리자 코드 입력 모달
-- **관리자 코드**: App.tsx `ADMIN_CODE` 상수
-- **관리자 전용**: 날짜 수정, 명단 수정, 연도 삭제 버튼
-- **EmptyState**: 관리자일 때만 "날짜 추가 시작" 버튼
+| 역할 | 이름 변경·저장 | 날짜 수정 | 명단 수정 | 연도 삭제 | 다음 연도 생성 |
+|------|----------------|-----------|-----------|-----------|----------------|
+| editor | ✓ | ✓ | ✓ | ✗ | ✗ |
+| admin | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+- **EmptyState**: editor/admin 둘 다 "날짜 추가 시작" 버튼 노출
+- **관리자로 입장하기**: admin 역할 부여용 코드 입력
+
+### 9.3 편집 잠금
+
+- **목적**: 동시 편집 충돌 방지
+- **RPC**: `acquire_edit_lock`, `refresh_edit_lock`, `release_edit_lock`
+- **획득 시점**: 날짜 수정 모달 열기, 명단 수정 모달 열기
+- **해제 시점**: 저장 완료, 모달 닫기, 교환 취소, beforeunload, unmount
+
+### 9.4 version 기반 충돌 방지 (추후 보완)
+
+- **현재**: 편집 잠금으로 동시 편집 방지
+- **보완 시**: `schedule_data.version`을 이용한 낙관적 잠금 추가 가능
+- **적용 시점**: 사용자 수·동시 편집 가능성이 늘어날 때
+- **구현 가이드**: [BACKEND_GUIDE.md](BACKEND_GUIDE.md) §6 참고
 
 ---
 
@@ -307,7 +327,7 @@
 
 ### 10.1 changeLog
 
-- **저장**: localStorage (ScheduleData 내 changeLog)
+- **저장**: Supabase schedule_data.payload.changeLog
 - **표시**: `{날짜2} {사람B} ↔ {날짜1} {사람A}` 형식
 
 ### 10.2 변경 취소
@@ -348,6 +368,8 @@ src/
 │   └── rotation.ts
 ├── data/
 │   └── schedule.json
+├── lib/
+│   └── supabase.ts   # Supabase 클라이언트, 환경 변수 검증
 ├── App.tsx
 └── main.tsx
 ```
@@ -358,12 +380,22 @@ src/
 
 | 상수 | 위치 | 설명 |
 |------|------|------|
-| DOCUMENT_CODE | App.tsx | 문서 입장 코드. 입장 통과 시 sessionStorage에 저장 |
-| ADMIN_CODE | App.tsx | 관리자 입장 코드 |
+| DOCUMENT_ID | 'default' | Supabase documents/document_access 기준 document_id |
 | YEAR_EXTEND_CONFIRM_CODE | App.tsx | 연도 확장 확인 코드 (기본값: '생성확인') |
 | DEFAULT_START_YEAR | App.tsx | 2026 |
 | SNACK_START_PERSON | rotation.ts | '김희권' (간식 로테이션 시작) |
 | CUSTOM_2026_* | rotation.ts | 2026 특수 패턴 (시작일, 토요일 2슬롯 등) |
+
+### 부록 A-2: Supabase 테이블 및 RPC
+
+| 테이블/함수 | 용도 |
+|-------------|------|
+| documents | document_id, 기본 메타데이터 |
+| document_access | 문서별 코드→역할 매핑 (grant_document_access) |
+| schedule_data | document_id, payload(JSONB), version |
+| acquire_edit_lock | 편집 잠금 획득 |
+| refresh_edit_lock | 잠금 연장 (heartbeat) |
+| release_edit_lock | 잠금 해제 |
 
 ---
 

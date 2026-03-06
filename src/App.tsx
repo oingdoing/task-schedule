@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import Header from './components/Header';
 import YearNavigator from './components/YearNavigator';
 import ScheduleTable from './components/ScheduleTable';
@@ -7,7 +7,7 @@ import EmptyState from './components/EmptyState';
 import EditDateModal from './components/EditDateModal';
 import EditRosterModal from './components/EditRosterModal';
 import ConfirmCodeModal from './components/ConfirmCodeModal';
-import EntryGate, { getEntryState } from './components/EntryGate';
+import EntryGate from './components/EntryGate';
 import AdminCodeModal from './components/AdminCodeModal';
 import UsageGuideModal from './components/UsageGuideModal';
 import { useSwapMode } from './hooks/useSwapMode';
@@ -34,20 +34,20 @@ import {
   sortSlots,
   toISODate,
 } from './utils/rotation';
+import { ensureAnonymousSession, supabase } from './lib/supabase';
 
-const STORAGE_KEY = 'duty-schedule-data-v1';
-const SEED_SIGNATURE_KEY = 'duty-schedule-seed-signature-v1';
 const YEAR_EXTEND_CONFIRM_CODE = '생성확인';
-const DOCUMENT_CODE = '열심히합니다';
-const ADMIN_CODE = 'ohiing7301!@';
 const DEFAULT_START_YEAR = 2026;
 const DEFAULT_WEEKDAYS = [3, 6, 0];
 const CUSTOM_2026_START_DATE = '2026-02-25';
 const CUSTOM_2026_DUPLICATE_SATURDAY = '2026-02-28';
+const DOCUMENT_ID = 'default';
+const EDIT_LOCK_REFRESH_MS = 60_000;
 const TEAM_MEMBER_LIMITS: Record<keyof Teams, number> = {
   설거지: 3,
   화장실청소: 2,
 };
+
 function buildDefaultSchedule(): ScheduleSlot[] {
   if (DEFAULT_START_YEAR === 2026) {
     return buildCustom2026PatternSlots(DEFAULT_WEEKDAYS);
@@ -124,10 +124,6 @@ function normalizeRosters(rosters: Rosters): Rosters {
   };
 }
 
-function buildSeedSignature(data: Pick<ScheduleData, 'teams' | 'rosters'>): string {
-  return JSON.stringify({ teams: data.teams, rosters: data.rosters });
-}
-
 function cloneData(data: ScheduleData): ScheduleData {
   const normalizedTeams = normalizeTeams(data.teams);
   const normalizedRosters = normalizeRosters(data.rosters);
@@ -166,51 +162,80 @@ function baseData(): ScheduleData {
   };
 }
 
-const DEFAULT_SEED_SIGNATURE = buildSeedSignature(baseData());
-
-function loadData(): ScheduleData {
-  if (typeof window === 'undefined') {
-    return baseData();
-  }
+async function loadDataFromSupabase(): Promise<ScheduleData> {
+  if (typeof window === 'undefined') return baseData();
 
   try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) {
+    const { data: row, error } = await supabase
+      .from('schedule_data')
+      .select('data, version')
+      .eq('document_id', DOCUMENT_ID)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return baseData();
+      console.warn('Supabase load error:', error);
       return baseData();
     }
 
-    const parsed = JSON.parse(saved) as Partial<ScheduleData>;
+    if (!row?.data) return baseData();
+
+    const parsed = row.data as Partial<ScheduleData>;
     const fallback = baseData();
-    const savedSeedSignature = window.localStorage.getItem(SEED_SIGNATURE_KEY);
-    const shouldApplySeedData = savedSeedSignature !== DEFAULT_SEED_SIGNATURE;
     const savedSchedule = Array.isArray(parsed.schedule)
       ? normalizeScheduleSlots(parsed.schedule as ScheduleSlot[])
       : fallback.schedule;
     const merged: ScheduleData = {
-      teams: shouldApplySeedData ? fallback.teams : parsed.teams ?? fallback.teams,
-      rosters: shouldApplySeedData ? fallback.rosters : parsed.rosters ?? fallback.rosters,
+      teams: parsed.teams ?? fallback.teams,
+      rosters: parsed.rosters ?? fallback.rosters,
       schedule: savedSchedule,
       changeLog: parsed.changeLog ?? fallback.changeLog,
     };
 
-    if (merged.schedule.length > 0) {
-      return merged;
-    }
-
-    return {
-      ...merged,
-      schedule: buildDefaultSchedule(),
-    };
+    if (merged.schedule.length > 0) return merged;
+    return { ...merged, schedule: buildDefaultSchedule() };
   } catch {
     return baseData();
   }
 }
 
-function getInitialYear(data: ScheduleData): number {
-  if (data.schedule.length === 0) {
-    return new Date().getFullYear();
+async function saveDataToSupabase(data: ScheduleData): Promise<void> {
+  const { error } = await supabase.from('schedule_data').upsert(
+    {
+      document_id: DOCUMENT_ID,
+      data,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'document_id' },
+  );
+  if (error) {
+    console.error('Supabase save error:', error);
+    throw error;
   }
-  return Number(data.schedule[0].date.slice(0, 4));
+}
+
+async function acquireEditLock(): Promise<boolean> {
+  const { error } = await supabase.rpc('acquire_edit_lock', {
+    p_document_id: DOCUMENT_ID,
+  });
+  return !error;
+}
+
+async function refreshEditLock(): Promise<void> {
+  const { error } = await supabase.rpc('refresh_edit_lock', {
+    p_document_id: DOCUMENT_ID,
+  });
+  if (error) throw error;
+}
+
+async function releaseEditLock(): Promise<void> {
+  await supabase.rpc('release_edit_lock', { p_document_id: DOCUMENT_ID });
+}
+
+function getInitialYear(data: ScheduleData): number {
+  if (data.schedule.length === 0) return new Date().getFullYear();
+  const years = data.schedule.map((slot) => Number(slot.date.slice(0, 4)));
+  return Math.min(...years);
 }
 
 function formatMonthDay(value: string): string {
@@ -223,18 +248,160 @@ function buildChangeSummary(log: ChangeLogEntry): string {
   return `${formatMonthDay(log.cellB.date)} ${log.cellB.person} ↔ ${formatMonthDay(log.cellA.date)} ${log.cellA.person}`;
 }
 
+type AccessRole = 'editor' | 'admin';
+
 export default function App() {
-  const [entryState, setEntryState] = useState(() => getEntryState());
+  const [accessState, setAccessState] = useState<{ role: AccessRole } | null>(null);
+  const [entryError, setEntryError] = useState<string | null>(null);
   const [isAdminCodeModalOpen, setAdminCodeModalOpen] = useState(false);
-  const [data, setData] = useState<ScheduleData>(() => loadData());
-  const [currentYear, setCurrentYear] = useState<number>(() => getInitialYear(loadData()));
+  const [data, setData] = useState<ScheduleData>(() => baseData());
+  const [currentYear, setCurrentYear] = useState<number>(() => getInitialYear(baseData()));
   const [searchQuery, setSearchQuery] = useState('');
   const [weekDetailKey, setWeekDetailKey] = useState<string | null>(null);
   const [isDateModalOpen, setDateModalOpen] = useState(false);
   const [isRosterModalOpen, setRosterModalOpen] = useState(false);
   const [isConfirmCodeModalOpen, setConfirmCodeModalOpen] = useState(false);
   const [isUsageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [hasEditLock, setHasEditLock] = useState(false);
+  const hasEditLockRef = useRef(false);
   const swapMode = useSwapMode();
+
+  const isAdmin = accessState?.role === 'admin';
+  const canEdit = accessState?.role === 'editor' || accessState?.role === 'admin';
+
+  useEffect(() => {
+    ensureAnonymousSession().catch((e) => {
+      console.error('anonymous session error:', e);
+      setEntryError('초기 인증에 실패했습니다. 새로고침 후 다시 시도해 주세요.');
+    });
+  }, []);
+
+  const handleGrantAccess = useCallback(async (code: string) => {
+    setEntryError(null);
+
+    await ensureAnonymousSession();
+
+    const { data: result, error } = await supabase.rpc('grant_document_access', {
+      p_document_id: DOCUMENT_ID,
+      p_code: code.trim(),
+    });
+
+    if (error) {
+      const msg = error.message ?? '코드가 일치하지 않습니다.';
+      setEntryError(msg);
+      throw new Error(msg);
+    }
+
+    const role = (
+      typeof result === 'object' && result !== null && 'role' in result
+        ? (result as { role: string }).role
+        : result
+    ) as AccessRole;
+    if (role !== 'editor' && role !== 'admin') {
+      const msg = '접근 권한을 확인할 수 없습니다.';
+      setEntryError(msg);
+      throw new Error(msg);
+    }
+
+    setAccessState({ role });
+    const loaded = await loadDataFromSupabase();
+    setData(loaded);
+    setCurrentYear(getInitialYear(loaded));
+    setEntryError(null);
+  }, []);
+
+  const doReleaseLock = useCallback(async () => {
+    if (!hasEditLockRef.current) return;
+    try {
+      await releaseEditLock();
+    } catch (e) {
+      console.warn('release_edit_lock error:', e);
+    } finally {
+      hasEditLockRef.current = false;
+      setHasEditLock(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (hasEditLockRef.current) {
+        releaseEditLock().catch(() => {});
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (hasEditLockRef.current) {
+        releaseEditLock().catch(() => {});
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasEditLock || !canEdit) return;
+    const interval = setInterval(() => {
+      refreshEditLock().catch(() => {});
+    }, EDIT_LOCK_REFRESH_MS);
+    return () => clearInterval(interval);
+  }, [hasEditLock, canEdit]);
+
+  const tryAcquireAndRun = useCallback(
+    async (fn: () => void) => {
+      if (!canEdit) return;
+      const ok = await acquireEditLock();
+      if (!ok) {
+        window.alert('다른 사용자가 편집 중입니다.');
+        return;
+      }
+      hasEditLockRef.current = true;
+      setHasEditLock(true);
+      fn();
+    },
+    [canEdit],
+  );
+
+  const handleOpenDateModal = useCallback(() => {
+    tryAcquireAndRun(() => setDateModalOpen(true));
+  }, [tryAcquireAndRun]);
+
+  const handleCloseDateModal = useCallback(() => {
+    doReleaseLock();
+    setDateModalOpen(false);
+  }, [doReleaseLock]);
+
+  const handleOpenRosterModal = useCallback(() => {
+    tryAcquireAndRun(() => setRosterModalOpen(true));
+  }, [tryAcquireAndRun]);
+
+  const handleCloseRosterModal = useCallback(() => {
+    doReleaseLock();
+    setRosterModalOpen(false);
+  }, [doReleaseLock]);
+
+  const handleCancelSwap = useCallback(() => {
+    doReleaseLock();
+    swapMode.reset();
+  }, [doReleaseLock, swapMode]);
+
+  const isFirstDataEffect = useRef(true);
+  useEffect(() => {
+    if (!canEdit) return;
+    if (isFirstDataEffect.current) {
+      isFirstDataEffect.current = false;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        await saveDataToSupabase(data);
+        if (hasEditLockRef.current) {
+          await doReleaseLock();
+        }
+      } catch (e) {
+        console.error('Save error:', e);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [data, canEdit, doReleaseLock]);
 
   const hasDataForYear = (year: number) =>
     data.schedule.some((slot) => Number(slot.date.slice(0, 4)) === year);
@@ -245,25 +412,31 @@ export default function App() {
       setCurrentYear(nextY);
       return;
     }
+    if (!isAdmin) {
+      window.alert('다음 연도 데이터 생성은 관리자만 가능합니다.');
+      return;
+    }
     const ok = window.confirm('다음 연도의 데이터를 생성하시겠습니까?');
     if (!ok) return;
     setConfirmCodeModalOpen(true);
   };
 
-  const handleConfirmExtendYear = () => {
+  const handleConfirmExtendYear = async () => {
     setConfirmCodeModalOpen(false);
     const nextY = currentYear + 1;
+    const ok = await acquireEditLock();
+    if (!ok) {
+      window.alert('다른 사용자가 편집 중입니다.');
+      return;
+    }
+    hasEditLockRef.current = true;
+    setHasEditLock(true);
     const currentSlots = data.schedule.filter((s) => Number(s.date.slice(0, 4)) <= currentYear);
     const extended = buildNextYearSlots(currentSlots, nextY, DEFAULT_WEEKDAYS);
     setData((prev) => ({ ...prev, schedule: normalizeScheduleSlots(extended) }));
     setCurrentYear(nextY);
     window.alert(`${nextY}년 데이터가 생성되었습니다.`);
   };
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    window.localStorage.setItem(SEED_SIGNATURE_KEY, DEFAULT_SEED_SIGNATURE);
-  }, [data]);
 
   const allRows = useMemo(() => computeAssignmentRows(data), [data]);
 
@@ -278,84 +451,77 @@ export default function App() {
   );
 
   const weekDetailRows = useMemo(() => {
-    if (!weekDetailKey) {
-      return [];
-    }
+    if (!weekDetailKey) return [];
     return yearRows.filter((row) => row.weekKey === weekDetailKey);
   }, [yearRows, weekDetailKey]);
 
   const weekDetailLabel = useMemo(() => weekDetailRows[0]?.weekLabel ?? null, [weekDetailRows]);
 
   useEffect(() => {
-    if (!weekDetailKey) {
-      return;
-    }
+    if (!weekDetailKey) return;
     if (!yearRows.some((row) => row.weekKey === weekDetailKey)) {
       setWeekDetailKey(null);
     }
   }, [weekDetailKey, yearRows]);
 
-  const handleSwapClick = (row: AssignmentRow, dutyType: SwapDutyType, targetPerson?: string) => {
-    const person = targetPerson ?? row.assignments[dutyType];
+  const handleSwapClick = useCallback(
+    (row: AssignmentRow, dutyType: SwapDutyType, targetPerson?: string) => {
+      if (!canEdit) return;
 
-    const target = {
-      slotId: row.slot.id,
-      date: row.slot.date,
-      dutyType,
-      person,
-    };
+      const person = targetPerson ?? row.assignments[dutyType];
+      const target = {
+        slotId: row.slot.id,
+        date: row.slot.date,
+        dutyType,
+        person,
+      };
 
-    if (!swapMode.source) {
-      const confirmed = window.confirm('담당자를 바꾸시겠습니까?');
-      if (!confirmed) {
+      if (!swapMode.source) {
+        const tryStartSwap = async () => {
+          const ok = await acquireEditLock();
+          if (!ok) {
+            window.alert('다른 사용자가 편집 중입니다.');
+            return;
+          }
+          hasEditLockRef.current = true;
+          setHasEditLock(true);
+          const confirmed = window.confirm('담당자를 바꾸시겠습니까?');
+          if (!confirmed) {
+            await doReleaseLock();
+            return;
+          }
+          swapMode.selectSource(target);
+        };
+        tryStartSwap();
         return;
       }
-      swapMode.selectSource(target);
-      return;
-    }
 
-    const source = swapMode.source;
+      const source = swapMode.source;
+      if (source.slotId === target.slotId && source.dutyType === target.dutyType) {
+        handleCancelSwap();
+        return;
+      }
+      if (source.dutyType !== target.dutyType) {
+        window.alert('같은 업무 항목끼리만 교환할 수 있습니다.');
+        return;
+      }
+      const confirmed = window.confirm(
+        `${formatDateWithWeekday(source.date)} ${source.person} ↔ ${formatDateWithWeekday(target.date)} ${target.person}\n이 사람과 바꾸시겠습니까?`,
+      );
+      if (!confirmed) return;
 
-    if (source.slotId === target.slotId && source.dutyType === target.dutyType) {
+      const entry: ChangeLogEntry = {
+        id: makeId('log'),
+        date: toISODate(new Date()),
+        dutyType: source.dutyType,
+        cellA: { slotId: source.slotId, date: source.date, person: source.person },
+        cellB: { slotId: target.slotId, date: target.date, person: target.person },
+      };
+      setData((prev) => ({ ...prev, changeLog: [...prev.changeLog, entry] }));
       swapMode.reset();
-      return;
-    }
-
-    if (source.dutyType !== target.dutyType) {
-      window.alert('같은 업무 항목끼리만 교환할 수 있습니다.');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${formatDateWithWeekday(source.date)} ${source.person} ↔ ${formatDateWithWeekday(target.date)} ${target.person}\n이 사람과 바꾸시겠습니까?`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    const entry: ChangeLogEntry = {
-      id: makeId('log'),
-      date: toISODate(new Date()),
-      dutyType: source.dutyType,
-      cellA: {
-        slotId: source.slotId,
-        date: source.date,
-        person: source.person,
-      },
-      cellB: {
-        slotId: target.slotId,
-        date: target.date,
-        person: target.person,
-      },
-    };
-
-    setData((prev) => ({
-      ...prev,
-      changeLog: [...prev.changeLog, entry],
-    }));
-    swapMode.reset();
-  };
+    },
+    [canEdit, swapMode, doReleaseLock, handleCancelSwap],
+  );
 
   const saveSlots = (slots: ScheduleSlot[]) => {
     setData((prev) => {
@@ -376,45 +542,34 @@ export default function App() {
   };
 
   const undoChange = (id: string) => {
+    if (!canEdit) return;
     const index = data.changeLog.findIndex((log) => log.id === id);
-    if (index < 0) {
-      return;
-    }
+    if (index < 0) return;
 
     const target = data.changeLog[index];
     const confirmed = window.confirm(`${buildChangeSummary(target)}\n이 변경 내역을 취소하시겠습니까?`);
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
-    setData((prev) => ({
-      ...prev,
-      changeLog: prev.changeLog.slice(0, index),
-    }));
+    tryAcquireAndRun(() => {
+      setData((prev) => ({ ...prev, changeLog: prev.changeLog.slice(0, index) }));
+    });
   };
 
-  if (!entryState.passed) {
+  if (!accessState) {
     return (
       <div className="app-shell">
         <Header onOpenUsageGuide={() => setUsageGuideOpen(true)} />
         <EntryGate
-          documentCode={DOCUMENT_CODE}
-          onPass={(isAdmin) => setEntryState({ passed: true, isAdmin })}
+          onCodeSubmit={handleGrantAccess}
+          error={entryError}
           onOpenAdminModal={() => setAdminCodeModalOpen(true)}
         />
         <AdminCodeModal
           isOpen={isAdminCodeModalOpen}
-          expectedCode={ADMIN_CODE}
-          onConfirm={() => {
-            setAdminCodeModalOpen(false);
-            setEntryState({ passed: true, isAdmin: true });
-          }}
+          onCodeSubmit={handleGrantAccess}
           onClose={() => setAdminCodeModalOpen(false)}
         />
-        <UsageGuideModal
-          isOpen={isUsageGuideOpen}
-          onClose={() => setUsageGuideOpen(false)}
-        />
+        <UsageGuideModal isOpen={isUsageGuideOpen} onClose={() => setUsageGuideOpen(false)} />
       </div>
     );
   }
@@ -441,37 +596,39 @@ export default function App() {
           />
         </label>
         <div className="action-buttons">
-          {swapMode.source && (
-            <button type="button" className="secondary" onClick={swapMode.reset}>
+          {swapMode.source && canEdit && (
+            <button type="button" className="secondary" onClick={handleCancelSwap}>
               교환 취소
             </button>
           )}
-          {entryState.isAdmin && (
+          {canEdit && (
             <>
-              <button type="button" onClick={() => setDateModalOpen(true)}>
+              <button type="button" onClick={handleOpenDateModal}>
                 날짜 수정
               </button>
-              <button type="button" onClick={() => setRosterModalOpen(true)}>
+              <button type="button" onClick={handleOpenRosterModal}>
                 명단 수정
               </button>
-              <button
-                type="button"
-                className="danger"
-                onClick={() => {
-                  const confirmed = window.confirm(
-                    `${currentYear}년도 데이터를 삭제하시겠습니까?`,
-                  );
-                  if (!confirmed) return;
-                  setData((prev) => ({
-                    ...prev,
-                    schedule: prev.schedule.filter(
-                      (s) => Number(s.date.slice(0, 4)) !== currentYear,
-                    ),
-                  }));
-                }}
-              >
-                연도 삭제
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    const confirmed = window.confirm(`${currentYear}년도 데이터를 삭제하시겠습니까?`);
+                    if (!confirmed) return;
+                    tryAcquireAndRun(() => {
+                      setData((prev) => ({
+                        ...prev,
+                        schedule: prev.schedule.filter(
+                          (s) => Number(s.date.slice(0, 4)) !== currentYear,
+                        ),
+                      }));
+                    });
+                  }}
+                >
+                  연도 삭제
+                </button>
+              )}
             </>
           )}
         </div>
@@ -479,8 +636,8 @@ export default function App() {
 
       {data.schedule.length === 0 ? (
         <EmptyState
-          onOpenDateModal={() => setDateModalOpen(true)}
-          canEdit={entryState.isAdmin}
+          onOpenDateModal={handleOpenDateModal}
+          canEdit={canEdit}
         />
       ) : (
         <>
@@ -492,7 +649,7 @@ export default function App() {
           ) : (
             <ScheduleTable
               rows={visibleRows}
-              swapSource={swapMode.source}
+              swapSource={canEdit ? swapMode.source : null}
               searchQuery={searchQuery}
               onOpenWeekDetail={(weekKey) => setWeekDetailKey(weekKey)}
               onDutyClick={handleSwapClick}
@@ -513,7 +670,7 @@ export default function App() {
         isOpen={isDateModalOpen}
         slots={data.schedule}
         currentYear={currentYear}
-        onClose={() => setDateModalOpen(false)}
+        onClose={handleCloseDateModal}
         onSave={saveSlots}
       />
 
@@ -521,7 +678,7 @@ export default function App() {
         isOpen={isRosterModalOpen}
         teams={data.teams}
         rosters={data.rosters}
-        onClose={() => setRosterModalOpen(false)}
+        onClose={handleCloseRosterModal}
         onSave={saveRosters}
       />
 
