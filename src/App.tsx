@@ -6,6 +6,7 @@ import WeekDetailPanel from './components/WeekDetailPanel';
 import EmptyState from './components/EmptyState';
 import EditDateModal from './components/EditDateModal';
 import EditRosterModal from './components/EditRosterModal';
+import SubstituteModal from './components/SubstituteModal';
 import ConfirmCodeModal from './components/ConfirmCodeModal';
 import EntryGate from './components/EntryGate';
 import AdminCodeModal from './components/AdminCodeModal';
@@ -245,6 +246,9 @@ function formatMonthDay(value: string): string {
 }
 
 function buildChangeSummary(log: ChangeLogEntry): string {
+  if (log.isSubstitute) {
+    return `${formatMonthDay(log.cellA.date)} ${log.cellB.person}가 ${log.cellA.person}의 것을 대신함`;
+  }
   return `${formatMonthDay(log.cellB.date)} ${log.cellB.person} ↔ ${formatMonthDay(log.cellA.date)} ${log.cellA.person}`;
 }
 
@@ -261,6 +265,7 @@ export default function App() {
   const [isDateModalOpen, setDateModalOpen] = useState(false);
   const [isRosterModalOpen, setRosterModalOpen] = useState(false);
   const [isConfirmCodeModalOpen, setConfirmCodeModalOpen] = useState(false);
+  const [isSubstituteModalOpen, setSubstituteModalOpen] = useState(false);
   const [isUsageGuideOpen, setUsageGuideOpen] = useState(false);
   const [hasEditLock, setHasEditLock] = useState(false);
   const hasEditLockRef = useRef(false);
@@ -382,6 +387,34 @@ export default function App() {
     doReleaseLock();
     swapMode.reset();
   }, [doReleaseLock, swapMode]);
+
+  const handleOpenSubstituteModal = useCallback(() => {
+    if (swapMode.source) setSubstituteModalOpen(true);
+  }, [swapMode.source]);
+
+  const handleCloseSubstituteModal = useCallback(() => {
+    setSubstituteModalOpen(false);
+  }, []);
+
+  const handleSaveSubstitute = useCallback(
+    (substituteName: string) => {
+      const source = swapMode.source;
+      if (!source) return;
+
+      const entry: ChangeLogEntry = {
+        id: makeId('log'),
+        date: toISODate(new Date()),
+        dutyType: source.dutyType,
+        cellA: { slotId: source.slotId, date: source.date, person: source.person },
+        cellB: { slotId: source.slotId, date: source.date, person: substituteName },
+        isSubstitute: true,
+      };
+      setData((prev) => ({ ...prev, changeLog: [...prev.changeLog, entry] }));
+      swapMode.reset();
+      setSubstituteModalOpen(false);
+    },
+    [swapMode],
+  );
 
   const isFirstDataEffect = useRef(true);
   useEffect(() => {
@@ -649,9 +682,14 @@ export default function App() {
         </label>
         <div className="action-buttons">
           {swapMode.source && canEdit && (
-            <button type="button" className="secondary" onClick={handleCancelSwap}>
-              교환 취소
-            </button>
+            <>
+              <button type="button" className="secondary" onClick={handleCancelSwap}>
+                교환 취소
+              </button>
+              <button type="button" className="secondary" onClick={handleOpenSubstituteModal}>
+                대신하기
+              </button>
+            </>
           )}
           {isAdmin && (
             <>
@@ -730,6 +768,15 @@ export default function App() {
         rosters={data.rosters}
         onClose={handleCloseRosterModal}
         onSave={saveRosters}
+      />
+
+      <SubstituteModal
+        isOpen={isSubstituteModalOpen}
+        originalPerson={swapMode.source?.person ?? ''}
+        slotDate={swapMode.source?.date ?? ''}
+        dutyType={swapMode.source?.dutyType ?? '피청'}
+        onSave={handleSaveSubstitute}
+        onClose={handleCloseSubstituteModal}
       />
 
       <ConfirmCodeModal

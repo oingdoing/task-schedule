@@ -729,26 +729,37 @@ function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): Assignme
       return;
     }
 
-    if (duty === '설거지' || duty === '화장실청소') {
-      rowA.assignments[duty] = replaceTeamMember(currentA, log.cellA.person, log.cellB.person);
-      rowB.assignments[duty] = replaceTeamMember(currentB, log.cellB.person, log.cellA.person);
-    } else if (duty === '건청') {
-      rowA.assignments[duty] = replaceCommaMember(currentA, log.cellA.person, log.cellB.person);
-      rowB.assignments[duty] = replaceCommaMember(currentB, log.cellB.person, log.cellA.person);
+    if (log.isSubstitute) {
+      // 대신하기: 한 칸만 변경, cellA와 cellB는 같은 슬롯
+      if (duty === '설거지' || duty === '화장실청소') {
+        rowA.assignments[duty] = replaceTeamMember(currentA, log.cellA.person, log.cellB.person);
+      } else if (duty === '건청') {
+        rowA.assignments[duty] = replaceCommaMember(currentA, log.cellA.person, log.cellB.person);
+      } else {
+        rowA.assignments[duty as keyof DutyAssignments] = log.cellB.person;
+      }
+      const message = `${log.cellB.person}가 ${log.cellA.person}의 것을 대신함`;
+      const note: ChangeNote = { logId: log.id, message };
+      addChangeNote(rowA, duty, note);
+      addChangedPerson(rowA, duty, log.cellB.person);
     } else {
-      rowA.assignments[duty as keyof DutyAssignments] = currentB;
-      rowB.assignments[duty as keyof DutyAssignments] = currentA;
+      if (duty === '설거지' || duty === '화장실청소') {
+        rowA.assignments[duty] = replaceTeamMember(currentA, log.cellA.person, log.cellB.person);
+        rowB.assignments[duty] = replaceTeamMember(currentB, log.cellB.person, log.cellA.person);
+      } else if (duty === '건청') {
+        rowA.assignments[duty] = replaceCommaMember(currentA, log.cellA.person, log.cellB.person);
+        rowB.assignments[duty] = replaceCommaMember(currentB, log.cellB.person, log.cellA.person);
+      } else {
+        rowA.assignments[duty as keyof DutyAssignments] = currentB;
+        rowB.assignments[duty as keyof DutyAssignments] = currentA;
+      }
+      const message = `${formatSwapLogDate(log.cellB.date)} ${log.cellB.person} ↔ ${formatSwapLogDate(log.cellA.date)} ${log.cellA.person}`;
+      const note: ChangeNote = { logId: log.id, message };
+      addChangeNote(rowA, duty, note);
+      addChangeNote(rowB, duty, note);
+      addChangedPerson(rowA, duty, log.cellB.person);
+      addChangedPerson(rowB, duty, log.cellA.person);
     }
-
-    const message = `${formatSwapLogDate(log.cellB.date)} ${log.cellB.person} ↔ ${formatSwapLogDate(log.cellA.date)} ${log.cellA.person}`;
-    const note: ChangeNote = {
-      logId: log.id,
-      message,
-    };
-    addChangeNote(rowA, duty, note);
-    addChangeNote(rowB, duty, note);
-    addChangedPerson(rowA, duty, log.cellB.person);
-    addChangedPerson(rowB, duty, log.cellA.person);
   });
 
   return mapped;

@@ -484,7 +484,7 @@ th {
   position: absolute;
   right: 0;
   top: calc(100% + 0.2rem);
-  min-width: 16rem;
+  min-width: 17rem;
   max-width: 20rem;
   background: #1e2f3a;
   color: #eef8ff;
@@ -643,6 +643,26 @@ th {
 
 .usage-guide-modal {
   width: min(520px, 100%);
+}
+
+.substitute-modal {
+  width: min(380px, 100%);
+}
+
+.substitute-context {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-muted, #5a6b73);
+}
+
+.substitute-input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.substitute-input-wrap span {
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .usage-guide-body {

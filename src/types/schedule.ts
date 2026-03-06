@@ -89,6 +89,8 @@ export interface ChangeLogEntry {
   dutyType: DutyType;
   cellA: SwapCellRef;
   cellB: SwapCellRef;
+  /** true면 교환이 아닌 '대신하기' (한 칸만 변경) */
+  isSubstitute?: boolean;
 }
 
 export interface ScheduleData {
