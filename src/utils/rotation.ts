@@ -242,6 +242,50 @@ function getDayOfWeek(value: string): number {
   return parseDate(value).getDay();
 }
 
+function addDaysToDate(value: string, days: number): string {
+  const d = parseDate(value);
+  d.setDate(d.getDate() + days);
+  return toISODate(d);
+}
+
+/**
+ * 주말블록: 토·일을 포함하는 연속일을 하나로 묶음.
+ * 예) 금토일 → 한 블록, 토일월 → 한 블록. 주말팀장이 블록 전체 담당.
+ */
+function getWeekendBlocks(dutyDates: Set<string>): Map<string, string> {
+  const dateToBlockKey = new Map<string, string>();
+  const visited = new Set<string>();
+
+  function expandBlock(startDate: string): string[] {
+    const block: string[] = [];
+    const stack = [startDate];
+    while (stack.length > 0) {
+      const d = stack.pop()!;
+      if (visited.has(d)) continue;
+      visited.add(d);
+      block.push(d);
+      for (const adj of [addDaysToDate(d, -1), addDaysToDate(d, 1)]) {
+        if (dutyDates.has(adj)) stack.push(adj);
+      }
+    }
+    return block;
+  }
+
+  const sortedDates = Array.from(dutyDates).sort();
+  for (const date of sortedDates) {
+    if (visited.has(date)) continue;
+    const day = getDayOfWeek(date);
+    if (day === DAY_SATURDAY || day === DAY_SUNDAY) {
+      const block = expandBlock(date);
+      const blockKey = [...block].sort()[0];
+      for (const d of block) {
+        dateToBlockKey.set(d, blockKey);
+      }
+    }
+  }
+  return dateToBlockKey;
+}
+
 function isSnackDay(day: number): boolean {
   return day === DAY_WEDNESDAY || day === DAY_SATURDAY || day === DAY_SUNDAY;
 }
@@ -544,12 +588,10 @@ function noDutyAssignments(slot: ScheduleSlot): DutyAssignments {
 }
 
 interface WeekRotationState {
-  hasWeekendDuty: boolean;
   hasWednesdayDuty: boolean;
   hasSnackDuty: boolean;
   snackIndex: number | null;
   weekdayLeaderIndex: number | null;
-  weekendLeaderIndex: number | null;
 }
 
 function formatTeamWithMembers(teamName: string, teams: Record<string, string[]>): string {
@@ -732,12 +774,10 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     const weekKey = getWeekKey(slot.date);
     if (!weekStateMap.has(weekKey)) {
       weekStateMap.set(weekKey, {
-        hasWeekendDuty: false,
         hasWednesdayDuty: false,
         hasSnackDuty: false,
         snackIndex: null,
         weekdayLeaderIndex: null,
-        weekendLeaderIndex: null,
       });
     }
 
@@ -748,9 +788,6 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     const dutyEnabled = normalizeSlotDutyEnabled(slot.dutyEnabled);
     const state = weekStateMap.get(weekKey)!;
     const day = getDayOfWeek(slot.date);
-    if (day === DAY_SATURDAY || day === DAY_SUNDAY) {
-      state.hasWeekendDuty = true;
-    }
     if (day === DAY_WEDNESDAY) {
       state.hasWednesdayDuty = true;
     }
@@ -764,16 +801,19 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     }
   });
 
+  const dutyDates = new Set(
+    sorted.filter((s) => s.hasDuty).map((s) => s.date),
+  );
+  const dateToWeekendBlock = getWeekendBlocks(dutyDates);
+  const weekendBlockKeys = [...new Set(dateToWeekendBlock.values())].sort();
+  const weekendBlockKeyToLeaderIndex = new Map<string, number>(
+    weekendBlockKeys.map((k, i) => [k, i]),
+  );
+
   let weeklySnackIndex = 0;
   let weekdayLeaderIndex = 0;
-  let weekendLeaderIndex = 0;
 
   weekStateMap.forEach((state) => {
-    if (state.hasWeekendDuty) {
-      state.weekendLeaderIndex = weekendLeaderIndex;
-      weekendLeaderIndex += 1;
-    }
-
     if (state.hasSnackDuty) {
       state.snackIndex = weeklySnackIndex;
       weeklySnackIndex += 1;
@@ -851,7 +891,6 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     const isSaturday = day === DAY_SATURDAY;
     const isSunday = day === DAY_SUNDAY;
     const isWednesday = day === DAY_WEDNESDAY;
-    const isWeekendSlot = isSaturday || isSunday;
     const isCustom2026Date = slot.date.startsWith(`${CUSTOM_BASE_YEAR}-`);
     const weekState = weekStateMap.get(weekKey);
     const dutyEnabled = normalizeSlotDutyEnabled(slot.dutyEnabled);
@@ -878,9 +917,13 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
       weekState && weekState.weekdayLeaderIndex !== null
         ? pick(weekdayLeaders, weekState.weekdayLeaderIndex)
         : NOT_APPLICABLE;
+    const weekendBlockKey = dateToWeekendBlock.get(slot.date);
     const weekendLeader =
-      weekState && weekState.weekendLeaderIndex !== null
-        ? pick(weekendLeaders, weekState.weekendLeaderIndex)
+      weekendBlockKey !== undefined
+        ? pick(
+            weekendLeaders,
+            weekendBlockKeyToLeaderIndex.get(weekendBlockKey) ?? 0,
+          )
         : NOT_APPLICABLE;
 
     let dishTeam = NOT_APPLICABLE;
@@ -922,7 +965,7 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
       커청: mainDutyIndex !== null ? mainPerson : NOT_APPLICABLE,
       건청: mainDutyIndex !== null ? mainPair : NOT_APPLICABLE,
       간식: isSnackDay(day) ? snackPerson : NOT_APPLICABLE,
-      본교팀장: isWednesday ? weekdayLeader : isWeekendSlot ? weekendLeader : NOT_APPLICABLE,
+      본교팀장: isWednesday ? weekdayLeader : weekendLeader,
       설거지: formatTeamWithMembers(dishTeam, data.teams.설거지),
       화장실청소: (() => {
         if (restroomAssignedMonthSet.has(monthKey)) {

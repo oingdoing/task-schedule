@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ScheduleSlot, ScheduleMemoType, SlotSelectableDuty } from '../types/schedule';
 import {
   SCHEDULE_MEMO_TYPES,
@@ -29,6 +29,7 @@ export default function EditDateModal({
 }: EditDateModalProps) {
   const [draft, setDraft] = useState<ScheduleSlot[]>([]);
   const [newSlotIds, setNewSlotIds] = useState<Set<string>>(new Set());
+  const hasInitializedForOpenRef = useRef(false);
 
   const addRow = useCallback(() => {
     const newSlot = buildDefaultSlot(new Date(currentYear, 0, 1));
@@ -38,8 +39,13 @@ export default function EditDateModal({
 
   useEffect(() => {
     if (!isOpen) {
+      hasInitializedForOpenRef.current = false;
       return;
     }
+    if (hasInitializedForOpenRef.current) {
+      return;
+    }
+    hasInitializedForOpenRef.current = true;
     const yearSlots = slots.filter((s) => Number(s.date.slice(0, 4)) === currentYear);
     setDraft(
       sortSlots(yearSlots).map((slot) => {
