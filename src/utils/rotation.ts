@@ -443,6 +443,45 @@ export function sortSlots(slots: ScheduleSlot[]): ScheduleSlot[] {
   });
 }
 
+/** 날짜 수정으로 슬롯이 밀리거나 당겨질 때 changeLog의 slotId/date를 새 스케줄에 맞게 마이그레이션 */
+export function migrateChangeLogForDateEdit(
+  oldSlots: ScheduleSlot[],
+  newSlots: ScheduleSlot[],
+  changeLog: ChangeLogEntry[],
+): ChangeLogEntry[] {
+  if (changeLog.length === 0 || newSlots.length === 0) {
+    return changeLog;
+  }
+  const oldSorted = sortSlots(oldSlots);
+  const newSorted = sortSlots(newSlots);
+  const newById = new Map(newSorted.map((s) => [s.id, s]));
+
+  const oldIdToNewRef = new Map<string, { slotId: string; date: string }>();
+  oldSorted.forEach((oldSlot, oldIndex) => {
+    const existing = newById.get(oldSlot.id);
+    if (existing) {
+      oldIdToNewRef.set(oldSlot.id, { slotId: existing.id, date: existing.date });
+    } else {
+      const successorIndex = Math.min(oldIndex, newSorted.length - 1);
+      const successor = newSorted[successorIndex];
+      oldIdToNewRef.set(oldSlot.id, { slotId: successor.id, date: successor.date });
+    }
+  });
+
+  return changeLog.map((entry) => {
+    const mapCell = (cell: { slotId: string; date: string; person: string }) => {
+      const mapped = oldIdToNewRef.get(cell.slotId);
+      if (!mapped) return cell;
+      return { ...cell, slotId: mapped.slotId, date: mapped.date };
+    };
+    return {
+      ...entry,
+      cellA: mapCell(entry.cellA),
+      cellB: mapCell(entry.cellB),
+    };
+  });
+}
+
 export function normalizeSlotDutyEnabled(
   dutyEnabled?: Partial<SlotDutyEnabled> | null,
 ): SlotDutyEnabled {

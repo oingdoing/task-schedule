@@ -31,6 +31,7 @@ import {
   formatDateWithWeekday,
   makeId,
   matchesSearch,
+  migrateChangeLogForDateEdit,
   normalizeSlotDutyEnabled,
   sortSlots,
   toISODate,
@@ -558,11 +559,23 @@ export default function App() {
 
   const saveSlots = (slots: ScheduleSlot[]) => {
     setData((prev) => {
+      const oldYearSlots = prev.schedule.filter(
+        (s) => Number(s.date.slice(0, 4)) === currentYear,
+      );
       const otherYears = prev.schedule.filter(
         (s) => Number(s.date.slice(0, 4)) !== currentYear,
       );
       const merged = [...otherYears, ...slots];
-      return { ...prev, schedule: normalizeScheduleSlots(merged) };
+      const migratedLog = migrateChangeLogForDateEdit(
+        oldYearSlots,
+        slots,
+        prev.changeLog,
+      );
+      return {
+        ...prev,
+        schedule: normalizeScheduleSlots(merged),
+        changeLog: migratedLog,
+      };
     });
   };
 
