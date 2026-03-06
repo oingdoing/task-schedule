@@ -555,6 +555,58 @@ export default function App() {
     });
   };
 
+  useEffect(() => {
+    if (!accessState) return;
+
+    const channel = supabase
+      .channel(`schedule-data-${DOCUMENT_ID}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'schedule_data',
+          filter: `document_id=eq.${DOCUMENT_ID}`,
+        },
+        (payload) => {
+          if (hasEditLockRef.current) return;
+          if (!payload.new || typeof payload.new !== 'object') return;
+
+          const row = payload.new as {
+            data?: Partial<ScheduleData>;
+          };
+
+          const nextData = row.data;
+          if (!nextData) return;
+
+          const fallback = baseData();
+          const savedSchedule = Array.isArray(nextData.schedule)
+            ? normalizeScheduleSlots(nextData.schedule as ScheduleSlot[])
+            : fallback.schedule;
+
+          const merged: ScheduleData = {
+            teams: nextData.teams ?? fallback.teams,
+            rosters: nextData.rosters ?? fallback.rosters,
+            schedule: savedSchedule,
+            changeLog: nextData.changeLog ?? fallback.changeLog,
+          };
+
+          setData(merged);
+          setCurrentYear((prev) => {
+            const hasYear = merged.schedule.some(
+              (slot) => Number(slot.date.slice(0, 4)) === prev,
+            );
+            return hasYear ? prev : getInitialYear(merged);
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [accessState]);
+
   if (!accessState) {
     return (
       <div className="app-shell">
