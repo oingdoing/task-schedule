@@ -27,3 +27,8 @@ export async function ensureAnonymousSession(): Promise<void> {
     await supabase.auth.signInAnonymously();
   }
 }
+
+
+console.log('SUPABASE URL:', import.meta.env.VITE_SUPABASE_URL);
+console.log('SUPABASE KEY PREFIX:', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.slice(0, 20));
+console.log('SUPABASE ANON PREFIX:', import.meta.env.VITE_SUPABASE_ANON_KEY?.slice(0, 20));
