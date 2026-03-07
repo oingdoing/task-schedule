@@ -347,27 +347,6 @@ export default function App() {
 
   /** 다른 탭에서 저장 시 최신 데이터로 동기화 (여러 탭 덮어쓰기 방지) */
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const channel = new BroadcastChannel('duty-schedule-sync');
-    syncChannelRef.current = channel;
-
-    const handleMessage = () => {
-      skipNextSaveRef.current = true;
-      loadDataFromSupabase().then((loaded) => {
-        setData(loaded);
-        setCurrentYear(getInitialYear(loaded));
-      });
-    };
-
-    channel.addEventListener('message', handleMessage);
-    return () => {
-      channel.removeEventListener('message', handleMessage);
-      channel.close();
-      syncChannelRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!hasEditLock || !canEdit) return;
     const interval = setInterval(() => {
       refreshEditLock().catch(() => {});
@@ -397,7 +376,7 @@ export default function App() {
   }, []);
 
   const tryAcquireAndRun = useCallback(
-    async (fn: () => void) => {
+    async (fn: () => void | Promise<void>) => {
       if (!canEdit) return;
       const ok = await acquireEditLock();
       if (!ok) {
@@ -406,7 +385,7 @@ export default function App() {
       }
       hasEditLockRef.current = true;
       setHasEditLock(true);
-      fn();
+      await fn();
     },
     [canEdit],
   );
@@ -475,6 +454,7 @@ export default function App() {
         if (hasEditLockRef.current) {
           await doReleaseLock();
         }
+        syncChannelRef.current?.postMessage({ type: 'data-saved' });
       } catch (e: unknown) {
         console.error('Save error:', e);
       }
@@ -641,8 +621,22 @@ export default function App() {
     const confirmed = window.confirm(`${buildChangeSummary(target)}\n이 변경 내역을 취소하시겠습니까?`);
     if (!confirmed) return;
 
-    tryAcquireAndRun(() => {
-      setData((prev: ScheduleData) => ({ ...prev, changeLog: prev.changeLog.slice(0, index) }));
+    tryAcquireAndRun(async () => {
+      const newData: ScheduleData = {
+        ...data,
+        changeLog: data.changeLog.slice(0, index),
+      };
+      setData(newData);
+      skipNextSaveRef.current = true;
+      try {
+        await saveDataToSupabase(newData);
+        if (hasEditLockRef.current) {
+          await doReleaseLock();
+        }
+        syncChannelRef.current?.postMessage({ type: 'data-saved' });
+      } catch (e: unknown) {
+        console.error('Save error:', e);
+      }
     });
   };
 
