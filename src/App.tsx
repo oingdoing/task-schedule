@@ -410,7 +410,7 @@ export default function App() {
         cellB: { slotId: source.slotId, date: source.date, person: substituteName },
         isSubstitute: true,
       };
-      setData((prev) => ({ ...prev, changeLog: [...prev.changeLog, entry] }));
+      setData((prev: ScheduleData) => ({ ...prev, changeLog: [...prev.changeLog, entry] }));
       swapMode.reset();
       setSubstituteModalOpen(false);
     },
@@ -430,7 +430,7 @@ export default function App() {
         if (hasEditLockRef.current) {
           await doReleaseLock();
         }
-      } catch (e) {
+      } catch (e: unknown) {
         console.error('Save error:', e);
       }
     }, 500);
@@ -438,7 +438,7 @@ export default function App() {
   }, [data, canEdit, doReleaseLock]);
 
   const hasDataForYear = (year: number) =>
-    data.schedule.some((slot) => Number(slot.date.slice(0, 4)) === year);
+    data.schedule.some((slot: ScheduleSlot) => Number(slot.date.slice(0, 4)) === year);
 
   const handleNextYear = () => {
     const nextY = currentYear + 1;
@@ -465,9 +465,9 @@ export default function App() {
     }
     hasEditLockRef.current = true;
     setHasEditLock(true);
-    const currentSlots = data.schedule.filter((s) => Number(s.date.slice(0, 4)) <= currentYear);
+    const currentSlots = data.schedule.filter((s: ScheduleSlot) => Number(s.date.slice(0, 4)) <= currentYear);
     const extended = buildNextYearSlots(currentSlots, nextY, DEFAULT_WEEKDAYS);
-    setData((prev) => ({ ...prev, schedule: normalizeScheduleSlots(extended) }));
+    setData((prev: ScheduleData) => ({ ...prev, schedule: normalizeScheduleSlots(extended) }));
     setCurrentYear(nextY);
     window.alert(`${nextY}년 데이터가 생성되었습니다.`);
   };
@@ -475,25 +475,25 @@ export default function App() {
   const allRows = useMemo(() => computeAssignmentRows(data), [data]);
 
   const yearRows = useMemo(
-    () => allRows.filter((row) => Number(row.slot.date.slice(0, 4)) === currentYear),
+    () => allRows.filter((row: AssignmentRow) => Number(row.slot.date.slice(0, 4)) === currentYear),
     [allRows, currentYear],
   );
 
   const visibleRows = useMemo(
-    () => yearRows.filter((row) => matchesSearch(row, searchQuery)),
+    () => yearRows.filter((row: AssignmentRow) => matchesSearch(row, searchQuery)),
     [yearRows, searchQuery],
   );
 
   const weekDetailRows = useMemo(() => {
     if (!weekDetailKey) return [];
-    return yearRows.filter((row) => row.weekKey === weekDetailKey);
+    return yearRows.filter((row: AssignmentRow) => row.weekKey === weekDetailKey);
   }, [yearRows, weekDetailKey]);
 
   const weekDetailLabel = useMemo(() => weekDetailRows[0]?.weekLabel ?? null, [weekDetailRows]);
 
   useEffect(() => {
     if (!weekDetailKey) return;
-    if (!yearRows.some((row) => row.weekKey === weekDetailKey)) {
+    if (!yearRows.some((row: AssignmentRow) => row.weekKey === weekDetailKey)) {
       setWeekDetailKey(null);
     }
   }, [weekDetailKey, yearRows]);
@@ -551,19 +551,19 @@ export default function App() {
         cellA: { slotId: source.slotId, date: source.date, person: source.person },
         cellB: { slotId: target.slotId, date: target.date, person: target.person },
       };
-      setData((prev) => ({ ...prev, changeLog: [...prev.changeLog, entry] }));
+      setData((prev: ScheduleData) => ({ ...prev, changeLog: [...prev.changeLog, entry] }));
       swapMode.reset();
     },
     [canEdit, swapMode, doReleaseLock, handleCancelSwap],
   );
 
   const saveSlots = (slots: ScheduleSlot[]) => {
-    setData((prev) => {
+    setData((prev: ScheduleData) => {
       const oldYearSlots = prev.schedule.filter(
-        (s) => Number(s.date.slice(0, 4)) === currentYear,
+        (s: ScheduleSlot) => Number(s.date.slice(0, 4)) === currentYear,
       );
       const otherYears = prev.schedule.filter(
-        (s) => Number(s.date.slice(0, 4)) !== currentYear,
+        (s: ScheduleSlot) => Number(s.date.slice(0, 4)) !== currentYear,
       );
       const merged = [...otherYears, ...slots];
       const migratedLog = migrateChangeLogForDateEdit(
@@ -580,7 +580,7 @@ export default function App() {
   };
 
   const saveRosters = (payload: { teams: Teams; rosters: Rosters }) => {
-    setData((prev) => ({
+    setData((prev: ScheduleData) => ({
       ...prev,
       teams: normalizeTeams(payload.teams),
       rosters: normalizeRosters(payload.rosters),
@@ -589,7 +589,7 @@ export default function App() {
 
   const undoChange = (id: string) => {
     if (!canEdit) return;
-    const index = data.changeLog.findIndex((log) => log.id === id);
+    const index = data.changeLog.findIndex((log: ChangeLogEntry) => log.id === id);
     if (index < 0) return;
 
     const target = data.changeLog[index];
@@ -597,7 +597,7 @@ export default function App() {
     if (!confirmed) return;
 
     tryAcquireAndRun(() => {
-      setData((prev) => ({ ...prev, changeLog: prev.changeLog.slice(0, index) }));
+      setData((prev: ScheduleData) => ({ ...prev, changeLog: prev.changeLog.slice(0, index) }));
     });
   };
 
@@ -614,7 +614,7 @@ export default function App() {
           table: 'schedule_data',
           filter: `document_id=eq.${DOCUMENT_ID}`,
         },
-        (payload) => {
+        (payload: { new?: unknown }) => {
           if (hasEditLockRef.current) return;
           if (!payload.new || typeof payload.new !== 'object') return;
 
@@ -638,9 +638,9 @@ export default function App() {
           };
 
           setData(merged);
-          setCurrentYear((prev) => {
+          setCurrentYear((prev: number) => {
             const hasYear = merged.schedule.some(
-              (slot) => Number(slot.date.slice(0, 4)) === prev,
+              (slot: ScheduleSlot) => Number(slot.date.slice(0, 4)) === prev,
             );
             return hasYear ? prev : getInitialYear(merged);
           });
