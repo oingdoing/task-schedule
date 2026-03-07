@@ -692,6 +692,11 @@ th {
   line-height: 1.5;
   color: var(--text-subtle);
 }
+.usage-guide-section .usage-guide-tip {
+  font-size: 0.85rem;
+  color: #62aa9e;
+  font-weight: 700;
+}
 
 .date-edit-table-wrap {
   overflow: auto;
