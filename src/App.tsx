@@ -697,7 +697,7 @@ export default function App() {
           {swapMode.source && canEdit && (
             <>
               <button type="button" className="secondary" onClick={handleCancelSwap}>
-                교환 취소
+                변경 취소
               </button>
               <button type="button" className="secondary" onClick={handleOpenSubstituteModal}>
                 대신하기
