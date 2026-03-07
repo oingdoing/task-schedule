@@ -1,5 +1,13 @@
 import type { AssignmentRow, ChangeNote, DutyType, SwapDutyType } from '../types/schedule';
-import { DUTY_COLUMNS, SWAPPABLE_DUTIES, getDutyLabel, parseTeamWithMembers } from '../utils/rotation';
+import {
+  DUTY_COLUMNS,
+  SWAPPABLE_DUTIES,
+  getDutyLabel,
+  getMonthLastDate,
+  getWeekLastDate,
+  parseTeamWithMembers,
+  toISODate,
+} from '../utils/rotation';
 import type { SwapTarget } from '../hooks/useSwapMode';
 import ChangeLogTooltip from './ChangeLogTooltip';
 import DateCell from './DateCell';
@@ -159,6 +167,7 @@ function renderTeamMemberCell(
   notes?: ChangeNote[],
   changedPeople?: string[],
   searchQuery?: string,
+  additionalTdClass?: string,
 ) {
   const parsed = parseTeamWithMembers(value);
   const swappable = sourceRow ? isSwappable(duty, sourceRow) : false;
@@ -168,6 +177,8 @@ function renderTeamMemberCell(
     'duty-td',
     highlighted ? 'highlight' : '',
     isEmptyValue ? 'empty-cell' : '',
+    duty === '화장실청소' ? 'duty-td-restroom' : '',
+    additionalTdClass ?? '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -196,7 +207,7 @@ function renderTeamMemberCell(
       : null;
 
   return (
-    <td key={key} rowSpan={rowSpan} className={`duty-td ${highlighted ? 'highlight' : ''} ${duty === '화장실청소' ? 'duty-td-restroom' : ''}`}>
+    <td key={key} rowSpan={rowSpan} className={`duty-td ${highlighted ? 'highlight' : ''} ${duty === '화장실청소' ? 'duty-td-restroom' : ''} ${additionalTdClass ?? ''}`}>
       <div className="duty-cell duty-cell-team">
         {restroomExtra && (
           <span className="restroom-extra-badge" aria-hidden>
@@ -254,6 +265,7 @@ function renderCommaMemberCell(
   notes?: ChangeNote[],
   changedPeople?: string[],
   searchQuery?: string,
+  additionalTdClass?: string,
 ) {
   const members = parseCommaMembers(value);
   const swappable = isSwappable(duty, row);
@@ -395,11 +407,14 @@ export default function ScheduleTable({
             const isMonthFirstRow =
               index === 0 || rows[index - 1].monthKey !== row.monthKey;
             const weekRowSpan = weekRowSpanByStart.get(index);
+            const weekLastDate = getWeekLastDate(row.slot.date);
+            const todayStr = toISODate(new Date());
+            const isWeekPassed = weekLastDate < todayStr;
 
             return (
               <tr
                 key={row.slot.id}
-                className={`${!row.slot.hasDuty ? 'no-duty-row' : ''} ${isWeekBoundary ? 'week-boundary-row' : ''} ${isMonthFirstRow ? 'month-first-row' : ''}`}
+                className={`${!row.slot.hasDuty ? 'no-duty-row' : ''} ${isWeekBoundary ? 'week-boundary-row' : ''} ${isMonthFirstRow ? 'month-first-row' : ''} ${isWeekPassed ? 'week-passed' : ''}`}
               >
                 {monthMeta ? (
                   <td rowSpan={monthMeta.rowSpan} className="month-cell">
@@ -419,6 +434,8 @@ export default function ScheduleTable({
                       !!sourceRow &&
                       swapSource.dutyType === duty &&
                       swapSource.slotId !== sourceRow.slot.id;
+                    const monthLastDate = getMonthLastDate(row.monthKey);
+                    const isMonthPassed = monthLastDate < todayStr;
 
                     return renderTeamMemberCell(
                       `${row.slot.id}-${duty}`,
@@ -433,6 +450,7 @@ export default function ScheduleTable({
                       sourceRow?.changeNotes[duty],
                       sourceRow?.changedPeople[duty],
                       searchQuery,
+                      isMonthPassed ? 'month-passed' : undefined,
                     );
                   }
 

@@ -257,9 +257,8 @@ td {
   border-right: 1px solid #dfe8ed;
   padding: 0;
   text-align: center;
-  vertical-align: top;
-  font-size:12px;
   vertical-align: middle;
+  font-size: 12px;
   word-break: keep-all;
 }
 
@@ -280,6 +279,18 @@ th {
   background: #f8fafbcc;
 }
 
+/* 주의 마지막 날짜(일요일)가 지난 주의 행 - 배경색 회색 (화장실청소, 월 셀 제외) */
+/* 화장실청소: 해당 월의 마지막 날이 지난 경우 배경색 회색 */
+tr.week-passed td:not(.duty-td-restroom, .month-cell),
+td.duty-td-restroom.month-passed {
+  background-color: #e1e1e1;
+}
+
+tr.week-passed td:not(.duty-td-restroom, .month-cell) .duty-btn,
+td.duty-td-restroom.month-passed .duty-btn {
+  background-color: #e1e1e1;
+}
+
 .duty-td.empty-cell {
   background-color: #f2f2f2;
 }
@@ -293,7 +304,7 @@ th {
 }
 
 .month-cell {
-  background: #ececec;
+  background: #e2f3e9;
   font-weight: 700;
   color: #2f3a40;
   text-align: center;
@@ -661,11 +672,22 @@ th {
 
 .view-roster-body {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 1.5rem;
+  width: 100%;
+  padding:25px 25px 35px;
+}
+.view-roster-body .view-roster-section:first-child {
+  width: 100%;
 }
 
-.view-roster-section h3 {
+.view-roster-body .view-roster-section:not(:first-child) {
+  flex: 1;
+}
+
+/* 모달 섹션 제목 (view-roster, usage-guide 공통) */
+.view-roster-section h3,
+.usage-guide-section h3 {
   font-size: 0.95rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
@@ -674,78 +696,7 @@ th {
 
 .view-roster-table {
   width: 100%;
-  border-collapse: collapse;
-}
-
-.view-roster-table th,
-.view-roster-table td {
-  border: 1px solid var(--line);
-  padding: 0.55rem;
-  text-align: left;
-}
-
-.view-roster-table th {
-  background: #f0f6f8;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #2f444c;
-}
-
-.view-roster-table td {
-  font-size: 0.9rem;
-}
-
-.substitute-modal {
-  width: min(380px, 100%);
-}
-
-.view-roster-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.view-roster-section h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem;
-  color: #1f2b2d;
-}
-
-.view-roster-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.view-roster-table th,
-.view-roster-table td {
-  border: 1px solid var(--line);
-  padding: 0.55rem;
-  text-align: left;
-}
-
-.view-roster-table th {
-  background: #f0f6f8;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #2f444c;
-}
-
-.view-roster-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.view-roster-section h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem;
-  color: #1f2b2d;
-}
-
-.view-roster-table {
-  width: 100%;
+  min-width: auto;
   border-collapse: collapse;
 }
 
@@ -757,16 +708,31 @@ th {
   vertical-align: top;
 }
 
-.view-roster-table th {
+/* 모달/보조 테이블 헤더 공통 스타일 */
+.view-roster-table th,
+.date-edit-table th,
+.team-grid th {
   background: #f0f6f8;
   font-size: 0.85rem;
   font-weight: 600;
   color: #2f444c;
+}
+
+.view-roster-table th {
   width: 8rem;
 }
 
 .view-roster-table td {
   font-size: 0.9rem;
+  background: #fff;
+}
+
+.usage-guide-section h3 {
+  margin: 0 0 0.4rem;
+}
+
+.substitute-modal {
+  width: min(380px, 100%);
 }
 
 .substitute-context {
@@ -791,13 +757,6 @@ th {
   gap: 1.25rem;
 }
 
-.usage-guide-section h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 0 0 0.4rem;
-  color: #1f2b2d;
-}
-
 .usage-guide-section p {
   margin: 0;
   font-size: 0.9rem;
@@ -808,42 +767,6 @@ th {
   font-size: 0.85rem;
   color: #62aa9e;
   font-weight: 700;
-}
-
-.view-roster-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.view-roster-section h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem;
-  color: #1f2b2d;
-}
-
-.view-roster-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.view-roster-table th,
-.view-roster-table td {
-  border: 1px solid var(--line);
-  padding: 0.55rem;
-  text-align: left;
-}
-
-.view-roster-table th {
-  background: #f0f6f8;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #2f444c;
-}
-
-.view-roster-table td {
-  font-size: 0.9rem;
 }
 
 .date-edit-table-wrap {
@@ -861,13 +784,6 @@ th {
   border: 1px solid var(--line);
   padding: 0.55rem;
   vertical-align: middle;
-}
-
-.date-edit-table th {
-  background: #f0f6f8;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #2f444c;
 }
 
 .date-edit-table td input[type='date'],
@@ -1030,7 +946,28 @@ th {
 }
 
 @media (max-width: 900px) {
-  .app-shell{min-width:360px}
+  .app-shell {
+    width: 100%;
+    max-width: 100%;
+    min-width: 360px;
+    padding: 1rem;
+  }
+
+  .app-shell > * {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* 메인 테이블만 너비 유지, 가로 스크롤 */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap table {
+    min-width: 860px;
+  }
+
   .change-tooltip-item {
     grid-template-columns: 1fr;
     justify-items: start;
@@ -1045,7 +982,9 @@ th {
     grid-template-columns: 1fr;
   }
 
-  .app-shell {
-    padding: 1rem;
+  .view-roster-body {
+    display: flex;
+    flex-wrap: nowrap;
+    flex-direction: column;
   }
 }

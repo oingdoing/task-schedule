@@ -54,7 +54,7 @@ export default function AdminCodeModal({
           <div className="modal-body">
             <p>관리자 코드를 입력해 주세요.</p>
             <input
-              type="text"
+              type="password"
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);

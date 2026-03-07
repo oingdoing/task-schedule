@@ -34,7 +34,7 @@ export default function EntryGate({
         <p>정확한 문서 코드를 입력해야 입장할 수 있습니다.</p>
         <form onSubmit={handleSubmit}>
           <input
-            type="text"
+            type="password"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="문서 코드"

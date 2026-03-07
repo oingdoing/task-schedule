@@ -322,8 +322,22 @@ export function getWeekLabel(value: string): string {
   return `${formatShortDate(toISODate(monday))}~${formatShortDate(toISODate(sunday))}`;
 }
 
+/** 주의 마지막 날짜(일요일) ISO 문자열 반환. 3/2~3/8 주면 "YYYY-MM-08" */
+export function getWeekLastDate(value: string): string {
+  const date = parseDate(value);
+  const sunday = getSunday(date);
+  return toISODate(sunday);
+}
+
 export function getMonthKey(value: string): string {
   return value.slice(0, 7);
+}
+
+/** 해당 월의 마지막 날짜 ISO 문자열 반환. monthKey "2026-03" → "2026-03-31" */
+export function getMonthLastDate(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  const lastDay = new Date(year, month, 0);
+  return toISODate(lastDay);
 }
 
 export function getMonthLabel(value: string): string {

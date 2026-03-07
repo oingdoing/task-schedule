@@ -24,7 +24,7 @@ export default function ViewRosterModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
-      <div className="modal card wide" onClick={(e) => e.stopPropagation()}>
+      <div className="modal card" onClick={(e) => e.stopPropagation()}>
         <header className="modal-header">
           <h2>명단 보기</h2>
           <button type="button" onClick={onClose}>
