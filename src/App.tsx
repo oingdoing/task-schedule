@@ -448,15 +448,23 @@ export default function App() {
       isFirstDataEffect.current = false;
       return;
     }
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
     const timer = setTimeout(async () => {
       try {
         await saveDataToSupabase(data);
-        if (hasEditLockRef.current) {
-          await doReleaseLock();
-        }
-        syncChannelRef.current?.postMessage({ type: 'data-saved' });
+        // DB 커밋 후 다른 탭이 최신 데이터를 읽을 수 있도록 짧은 지연 후 broadcast
+        setTimeout(() => {
+          syncChannelRef.current?.postMessage({ type: 'data-saved' });
+        }, 100);
       } catch (e: unknown) {
         console.error('Save error:', e);
+      } finally {
+        if (hasEditLockRef.current) {
+          doReleaseLock().catch((e) => console.warn('release_edit_lock error:', e));
+        }
       }
     }, 500);
     return () => clearTimeout(timer);
@@ -630,12 +638,16 @@ export default function App() {
       skipNextSaveRef.current = true;
       try {
         await saveDataToSupabase(newData);
-        if (hasEditLockRef.current) {
-          await doReleaseLock();
-        }
-        syncChannelRef.current?.postMessage({ type: 'data-saved' });
+        // 저장 직후 broadcast (doReleaseLock 실패해도 broadcast는 실행됨)
+        setTimeout(() => {
+          syncChannelRef.current?.postMessage({ type: 'data-saved' });
+        }, 100);
       } catch (e: unknown) {
         console.error('Save error:', e);
+      } finally {
+        if (hasEditLockRef.current) {
+          doReleaseLock().catch((e) => console.warn('release_edit_lock error:', e));
+        }
       }
     });
   };
@@ -676,6 +688,7 @@ export default function App() {
             changeLog: nextData.changeLog ?? fallback.changeLog,
           };
 
+          skipNextSaveRef.current = true;
           setData(merged);
           setCurrentYear((prev: number) => {
             const hasYear = merged.schedule.some(
@@ -683,6 +696,7 @@ export default function App() {
             );
             return hasYear ? prev : getInitialYear(merged);
           });
+          syncChannelRef.current?.postMessage({ type: 'data-saved' });
         },
       )
       .subscribe();
