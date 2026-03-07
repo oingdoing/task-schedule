@@ -235,7 +235,7 @@ textarea {
 
 table {
   width: 100%;
-  min-width: 830px;
+  min-width: 860px;
   border-collapse: collapse;
 }
 
@@ -249,6 +249,7 @@ td {
   vertical-align: top;
   font-size:12px;
   vertical-align: middle;
+  word-break: keep-all;
 }
 
 th:first-child,
@@ -307,6 +308,7 @@ th {
 .date-cell-inner {
   position: relative;
   display: inline-block;
+  min-width: 80px;
 }
 
 /* 일정 선택 시 날짜 굵게 */
@@ -402,6 +404,7 @@ th {
 
 .team-badge {
   display: inline-block;
+  min-width: 36px;
   padding: 0.15rem 0.48rem;
   border-radius: 999px;
   background: #edf5ff;
