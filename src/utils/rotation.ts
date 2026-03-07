@@ -739,6 +739,77 @@ function addChangedPerson(row: AssignmentRow, dutyType: DutyType, person: string
   row.changedPeople[dutyType] = [...current, person];
 }
 
+/** 주간 단위 병합 대상 (피청·커청·건청·간식·본교팀장) */
+const MERGEABLE_DUTIES: DutyType[] = ['피청', '커청', '건청', '간식', '본교팀장'];
+
+/** 빈 행 건너뛰고 병합 */
+const MERGE_ACROSS_EMPTY_DUTIES: DutyType[] = ['피청', '커청', '건청', '간식'];
+
+function isMergeCandidateForDuty(row: AssignmentRow, duty: DutyType): boolean {
+  if (!row.slot.hasDuty) {
+    return false;
+  }
+  const value = row.assignments[duty];
+  return Boolean(value) && value !== '-' && !value.startsWith('당번 없음');
+}
+
+function isEmptyDutyValue(value: string): boolean {
+  return !value || value === '-' || value.startsWith('당번 없음');
+}
+
+/** 병합된 셀 그룹의 모든 행 인덱스 반환 (주간 병합: 피청·커청·건청·간식·본교팀장) */
+function getMergeGroupIndices(
+  rows: AssignmentRow[],
+  duty: DutyType,
+  rowIndex: number,
+): number[] {
+  if (!MERGEABLE_DUTIES.includes(duty)) {
+    return [rowIndex];
+  }
+
+  const mergeAcrossEmpty = MERGE_ACROSS_EMPTY_DUTIES.includes(duty);
+
+  for (let index = 0; index < rows.length; ) {
+    const currentRow = rows[index];
+    if (!isMergeCandidateForDuty(currentRow, duty)) {
+      if (index === rowIndex) {
+        return [rowIndex];
+      }
+      index += 1;
+      continue;
+    }
+
+    const currentValue = currentRow.assignments[duty];
+    let end = index + 1;
+    while (end < rows.length) {
+      const nextRow = rows[end];
+      const nextValue = nextRow.assignments[duty];
+
+      if (mergeAcrossEmpty && isEmptyDutyValue(nextValue)) {
+        end += 1;
+      } else if (!isMergeCandidateForDuty(nextRow, duty) || nextValue !== currentValue) {
+        break;
+      } else {
+        end += 1;
+      }
+    }
+
+    if (rowIndex >= index && rowIndex < end) {
+      return Array.from({ length: end - index }, (_, i) => index + i);
+    }
+    index = end;
+  }
+
+  return [rowIndex];
+}
+
+/** 화장실청소: 같은 월의 모든 행 인덱스 반환 */
+function getRestroomMergeGroupIndices(rows: AssignmentRow[], monthKey: string): number[] {
+  return rows
+    .map((row, i) => (row.monthKey === monthKey ? i : -1))
+    .filter((i) => i >= 0);
+}
+
 function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): AssignmentRow[] {
   if (logs.length === 0) {
     return rows;
@@ -751,6 +822,7 @@ function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): Assignme
     changedPeople: { ...row.changedPeople },
   }));
   const rowById = new Map(mapped.map((row) => [row.slot.id, row]));
+  const indexBySlotId = new Map(mapped.map((row, i) => [row.slot.id, i]));
 
   logs.forEach((log) => {
     const rowA = rowById.get(log.cellA.slotId);
@@ -768,34 +840,59 @@ function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): Assignme
       return;
     }
 
+    const indexA = indexBySlotId.get(log.cellA.slotId) ?? -1;
+    const indexB = indexBySlotId.get(log.cellB.slotId) ?? -1;
+    if (indexA < 0 || indexB < 0) {
+      return;
+    }
+
+    const indicesA =
+      duty === '화장실청소'
+        ? getRestroomMergeGroupIndices(mapped, rowA.monthKey)
+        : getMergeGroupIndices(mapped, duty, indexA);
+    const indicesB =
+      duty === '화장실청소'
+        ? getRestroomMergeGroupIndices(mapped, rowB.monthKey)
+        : getMergeGroupIndices(mapped, duty, indexB);
+
+    const newValueA =
+      duty === '설거지' || duty === '화장실청소'
+        ? replaceTeamMember(currentA, log.cellA.person, log.cellB.person)
+        : duty === '건청'
+          ? replaceCommaMember(currentA, log.cellA.person, log.cellB.person)
+          : log.cellB.person;
+    const newValueB =
+      duty === '설거지' || duty === '화장실청소'
+        ? replaceTeamMember(currentB, log.cellB.person, log.cellA.person)
+        : duty === '건청'
+          ? replaceCommaMember(currentB, log.cellB.person, log.cellA.person)
+          : currentA;
+
     if (log.isSubstitute) {
-      // 대신하기: 한 칸만 변경, cellA와 cellB는 같은 슬롯
-      if (duty === '설거지' || duty === '화장실청소') {
-        rowA.assignments[duty] = replaceTeamMember(currentA, log.cellA.person, log.cellB.person);
-      } else if (duty === '건청') {
-        rowA.assignments[duty] = replaceCommaMember(currentA, log.cellA.person, log.cellB.person);
-      } else {
-        rowA.assignments[duty as keyof DutyAssignments] = log.cellB.person;
+      for (const i of indicesA) {
+        mapped[i].assignments[duty as keyof DutyAssignments] = newValueA;
       }
       const message = `${log.cellB.person}가 ${log.cellA.person}의 것을 대신함`;
       const note: ChangeNote = { logId: log.id, message };
-      addChangeNote(rowA, duty, note);
+      for (const i of indicesA) {
+        addChangeNote(mapped[i], duty, note);
+      }
       addChangedPerson(rowA, duty, log.cellB.person);
     } else {
-      if (duty === '설거지' || duty === '화장실청소') {
-        rowA.assignments[duty] = replaceTeamMember(currentA, log.cellA.person, log.cellB.person);
-        rowB.assignments[duty] = replaceTeamMember(currentB, log.cellB.person, log.cellA.person);
-      } else if (duty === '건청') {
-        rowA.assignments[duty] = replaceCommaMember(currentA, log.cellA.person, log.cellB.person);
-        rowB.assignments[duty] = replaceCommaMember(currentB, log.cellB.person, log.cellA.person);
-      } else {
-        rowA.assignments[duty as keyof DutyAssignments] = currentB;
-        rowB.assignments[duty as keyof DutyAssignments] = currentA;
+      for (const i of indicesA) {
+        mapped[i].assignments[duty as keyof DutyAssignments] = newValueA;
+      }
+      for (const i of indicesB) {
+        mapped[i].assignments[duty as keyof DutyAssignments] = newValueB;
       }
       const message = `${formatSwapLogDate(log.cellB.date)} ${log.cellB.person} ↔ ${formatSwapLogDate(log.cellA.date)} ${log.cellA.person}`;
       const note: ChangeNote = { logId: log.id, message };
-      addChangeNote(rowA, duty, note);
-      addChangeNote(rowB, duty, note);
+      for (const i of indicesA) {
+        addChangeNote(mapped[i], duty, note);
+      }
+      for (const i of indicesB) {
+        addChangeNote(mapped[i], duty, note);
+      }
       addChangedPerson(rowA, duty, log.cellB.person);
       addChangedPerson(rowB, duty, log.cellA.person);
     }
