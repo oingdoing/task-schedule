@@ -270,6 +270,8 @@ export default function App() {
   const [isUsageGuideOpen, setUsageGuideOpen] = useState(false);
   const [hasEditLock, setHasEditLock] = useState(false);
   const hasEditLockRef = useRef(false);
+  const skipNextSaveRef = useRef(false);
+  const syncChannelRef = useRef<BroadcastChannel | null>(null);
   const swapMode = useSwapMode();
 
   const isAdmin = accessState?.role === 'admin';
@@ -343,6 +345,28 @@ export default function App() {
     };
   }, []);
 
+  /** 다른 탭에서 저장 시 최신 데이터로 동기화 (여러 탭 덮어쓰기 방지) */
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel('duty-schedule-sync');
+    syncChannelRef.current = channel;
+
+    const handleMessage = () => {
+      skipNextSaveRef.current = true;
+      loadDataFromSupabase().then((loaded) => {
+        setData(loaded);
+        setCurrentYear(getInitialYear(loaded));
+      });
+    };
+
+    channel.addEventListener('message', handleMessage);
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+      channel.close();
+      syncChannelRef.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     if (!hasEditLock || !canEdit) return;
     const interval = setInterval(() => {
@@ -350,6 +374,27 @@ export default function App() {
     }, EDIT_LOCK_REFRESH_MS);
     return () => clearInterval(interval);
   }, [hasEditLock, canEdit]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel('duty-schedule-sync');
+    syncChannelRef.current = channel;
+
+    const handleMessage = () => {
+      skipNextSaveRef.current = true;
+      loadDataFromSupabase().then((loaded) => {
+        setData(loaded);
+        setCurrentYear(getInitialYear(loaded));
+      });
+    };
+
+    channel.addEventListener('message', handleMessage);
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+      channel.close();
+      syncChannelRef.current = null;
+    };
+  }, []);
 
   const tryAcquireAndRun = useCallback(
     async (fn: () => void) => {
