@@ -248,7 +248,7 @@ function formatMonthDay(value: string): string {
 
 function buildChangeSummary(log: ChangeLogEntry): string {
   if (log.isSubstitute) {
-    return `${formatMonthDay(log.cellA.date)} ${log.cellB.person}가 ${log.cellA.person}의 것을 대신함`;
+    return `${formatMonthDay(log.cellA.date)} ${log.cellA.person} ➡ ${log.cellB.person}로 변경`;
   }
   return `${formatMonthDay(log.cellB.date)} ${log.cellB.person} ↔ ${formatMonthDay(log.cellA.date)} ${log.cellA.person}`;
 }
