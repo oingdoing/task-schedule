@@ -872,7 +872,7 @@ function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): Assignme
       for (const i of indicesA) {
         mapped[i].assignments[duty as keyof DutyAssignments] = newValueA;
       }
-      const message = `${log.cellA.person} ➡ ${log.cellB.person}로 변경`;
+      const message = `${log.cellA.person} ➡ ${log.cellB.person} 변경`;
       const note: ChangeNote = { logId: log.id, message };
       for (const i of indicesA) {
         addChangeNote(mapped[i], duty, note);
