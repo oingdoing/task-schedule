@@ -50,6 +50,9 @@ export default function UsageGuideModal({ isOpen, onClose }: UsageGuideModalProp
               <p>{section.content}</p>
             </section>
           ))}
+          <p className="usage-guide-tip">
+            * 작업이 잘 되지 않는다면, 강력 새로고침(Ctrl+Shift+R)을 한번 하고 다시 시도해 보세요.
+          </p>
         </div>
       </div>
     </div>
