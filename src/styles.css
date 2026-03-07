@@ -175,6 +175,12 @@ textarea {
   font-size: clamp(1rem, 2vw, 1.6rem);
 }
 
+.header-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .header-usage-btn {
   flex-shrink: 0;
 }
@@ -653,8 +659,114 @@ th {
   width: min(520px, 100%);
 }
 
+.view-roster-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.view-roster-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #1f2b2d;
+}
+
+.view-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.view-roster-table th,
+.view-roster-table td {
+  border: 1px solid var(--line);
+  padding: 0.55rem;
+  text-align: left;
+}
+
+.view-roster-table th {
+  background: #f0f6f8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2f444c;
+}
+
+.view-roster-table td {
+  font-size: 0.9rem;
+}
+
 .substitute-modal {
   width: min(380px, 100%);
+}
+
+.view-roster-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.view-roster-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #1f2b2d;
+}
+
+.view-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.view-roster-table th,
+.view-roster-table td {
+  border: 1px solid var(--line);
+  padding: 0.55rem;
+  text-align: left;
+}
+
+.view-roster-table th {
+  background: #f0f6f8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2f444c;
+}
+
+.view-roster-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.view-roster-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #1f2b2d;
+}
+
+.view-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.view-roster-table th,
+.view-roster-table td {
+  border: 1px solid var(--line);
+  padding: 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.view-roster-table th {
+  background: #f0f6f8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2f444c;
+  width: 8rem;
+}
+
+.view-roster-table td {
+  font-size: 0.9rem;
 }
 
 .substitute-context {
@@ -696,6 +808,42 @@ th {
   font-size: 0.85rem;
   color: #62aa9e;
   font-weight: 700;
+}
+
+.view-roster-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.view-roster-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #1f2b2d;
+}
+
+.view-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.view-roster-table th,
+.view-roster-table td {
+  border: 1px solid var(--line);
+  padding: 0.55rem;
+  text-align: left;
+}
+
+.view-roster-table th {
+  background: #f0f6f8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2f444c;
+}
+
+.view-roster-table td {
+  font-size: 0.9rem;
 }
 
 .date-edit-table-wrap {

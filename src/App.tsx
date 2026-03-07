@@ -11,6 +11,7 @@ import ConfirmCodeModal from './components/ConfirmCodeModal';
 import EntryGate from './components/EntryGate';
 import AdminCodeModal from './components/AdminCodeModal';
 import UsageGuideModal from './components/UsageGuideModal';
+import ViewRosterModal from './components/ViewRosterModal';
 import { useSwapMode } from './hooks/useSwapMode';
 import initialDataJson from './data/schedule.json';
 import type {
@@ -268,6 +269,7 @@ export default function App() {
   const [isConfirmCodeModalOpen, setConfirmCodeModalOpen] = useState(false);
   const [isSubstituteModalOpen, setSubstituteModalOpen] = useState(false);
   const [isUsageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [isViewRosterOpen, setViewRosterOpen] = useState(false);
   const [hasEditLock, setHasEditLock] = useState(false);
   const hasEditLockRef = useRef(false);
   const skipNextSaveRef = useRef(false);
@@ -709,7 +711,10 @@ export default function App() {
   if (!accessState) {
     return (
       <div className="app-shell">
-        <Header onOpenUsageGuide={() => setUsageGuideOpen(true)} />
+        <Header
+          onOpenViewRoster={() => setViewRosterOpen(true)}
+          onOpenUsageGuide={() => setUsageGuideOpen(true)}
+        />
         <EntryGate
           onCodeSubmit={handleGrantAccess}
           error={entryError}
@@ -721,13 +726,22 @@ export default function App() {
           onClose={() => setAdminCodeModalOpen(false)}
         />
         <UsageGuideModal isOpen={isUsageGuideOpen} onClose={() => setUsageGuideOpen(false)} />
+        <ViewRosterModal
+          isOpen={isViewRosterOpen}
+          teams={data.teams}
+          rosters={data.rosters}
+          onClose={() => setViewRosterOpen(false)}
+        />
       </div>
     );
   }
 
   return (
     <div className="app-shell">
-      <Header onOpenUsageGuide={() => setUsageGuideOpen(true)} />
+      <Header
+          onOpenViewRoster={() => setViewRosterOpen(true)}
+          onOpenUsageGuide={() => setUsageGuideOpen(true)}
+        />
 
       <YearNavigator
         year={currentYear}
@@ -855,6 +869,13 @@ export default function App() {
       <UsageGuideModal
         isOpen={isUsageGuideOpen}
         onClose={() => setUsageGuideOpen(false)}
+      />
+
+      <ViewRosterModal
+        isOpen={isViewRosterOpen}
+        teams={data.teams}
+        rosters={data.rosters}
+        onClose={() => setViewRosterOpen(false)}
       />
     </div>
   );
