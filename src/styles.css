@@ -180,14 +180,19 @@ textarea {
 }
 
 .search-box {
-  display: grid;
-  gap: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   min-width: min(20rem, 100%);
 }
 
 .search-box span {
   font-size: 0.85rem;
   color: var(--text-subtle);
+}
+
+.search-box input {
+  max-width:160px;
 }
 
 .year-nav {
