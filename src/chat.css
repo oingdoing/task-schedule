@@ -270,7 +270,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  flex-shrink: 0;
+  width:100%;
   padding: 0.75rem 1rem;
   background: var(--chat-bubble-others);
   border-top: 1px solid var(--chat-line);
