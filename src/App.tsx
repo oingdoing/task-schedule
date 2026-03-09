@@ -890,7 +890,7 @@ export default function App() {
         }
         aria-label="채팅하기"
       >
-        채팅하기
+        토킹 😎
       </button>
     </div>
   );
