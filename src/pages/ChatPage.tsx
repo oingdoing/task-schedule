@@ -31,6 +31,7 @@ export default function ChatPage() {
   const listEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const leaveSentRef = useRef(false);
   const participantNoticeShownRef = useRef(false);
   const joinedAtRef = useRef<string | null>(null);
@@ -200,6 +201,7 @@ export default function ChatPage() {
     });
     setLoading(false);
     if (error) setSendError(error.message);
+    setTimeout(() => messageInputRef.current?.focus(), 0);
   };
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -216,6 +218,7 @@ export default function ChatPage() {
     if (uploadError) {
       setSendError(uploadError.message);
       setLoading(false);
+      setTimeout(() => messageInputRef.current?.focus(), 0);
       return;
     }
     const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
@@ -228,9 +231,10 @@ export default function ChatPage() {
     });
     setLoading(false);
     if (insertError) setSendError(insertError.message);
+    setTimeout(() => messageInputRef.current?.focus(), 0);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendText();
@@ -363,8 +367,8 @@ export default function ChatPage() {
             >
               +
             </button>
-            <input
-              type="text"
+            <textarea
+              ref={messageInputRef}
               className="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -372,6 +376,7 @@ export default function ChatPage() {
               placeholder="입력하는 창"
               disabled={loading}
               maxLength={2000}
+              rows={2}
             />
             <button
               type="button"
