@@ -8,7 +8,7 @@
   --chat-line: var(--line, #d3dde4);
   --chat-accent: var(--brand, #62aa9e);
   font-family: inherit;
-  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--chat-bg);
@@ -72,7 +72,7 @@
 
 /* 헤더 */
 .chat-header {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -163,7 +163,7 @@
 
 .chat-messages {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
   padding: 1rem;
   display: flex;
   flex-direction: column;
@@ -259,7 +259,6 @@
   display: block;
   max-width: 100%;
   height: auto;
-  vertical-align: top;
 }
 
 /* 입력 영역 */
@@ -321,7 +320,7 @@
 }
 
 .chat-input {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--chat-line);
