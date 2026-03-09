@@ -311,7 +311,6 @@ export default function ChatPage() {
                 className={`chat-message chat-message--${isMine ? 'mine' : 'others'}`}
               >
                 <div className="chat-message-meta">
-                  <span className="chat-message-name">{msg.sender_nickname ?? '알 수 없음'}</span>
                   <span className="chat-message-time">
                     {new Date(msg.created_at).toLocaleTimeString('ko-KR', {
                       hour: '2-digit',
@@ -319,6 +318,7 @@ export default function ChatPage() {
                       hour12: true,
                     })}
                   </span>
+                  <span className="chat-message-name">{msg.sender_nickname ?? '알 수 없음'}</span>
                 </div>
                 {msg.image_url && (
                   <a
