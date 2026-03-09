@@ -4,6 +4,7 @@
   --chat-bubble-mine: #fff9c4;
   --chat-bubble-others: #fff;
   --chat-system-bg: #e0e0e0;
+  --chat-system-bg-dark: #d2e4f0;
   --chat-line: var(--line, #d3dde4);
   --chat-accent: var(--brand, #62aa9e);
   font-family: inherit;
@@ -122,7 +123,7 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.6rem 1rem;
-  background: var(--chat-system-bg);
+  background: var(--chat-system-bg-dark);
   border-bottom: 1px solid var(--chat-line);
   font-size: 0.85rem;
   color: #555;
@@ -217,8 +218,8 @@
 }
 
 .chat-message-body--system {
-  background: var(--chat-system-bg);
-  color: #555;
+  background: #faf6e9;
+  color: #343434;
   text-align: center;
 }
 

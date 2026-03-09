@@ -215,6 +215,10 @@ textarea {
   font-size: 1.8rem;
 }
 
+.year-nav button {
+  font-size: 1.4rem;
+}
+
 .actions {
   padding: 1rem;
   display: flex;
@@ -745,8 +749,9 @@ td.duty-td-restroom.month-passed .duty-btn {
   padding: 0.65rem 1rem;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #fff;
-  background: var(--accent, #0d7a6e);
+  color: #19424d;
+  background: #e2f3e9;
+  border:1px solid #9bc9ae;
   border: none;
   border-radius: 999px;
   cursor: pointer;
@@ -993,7 +998,6 @@ td.duty-td-restroom.month-passed .duty-btn {
   }
 
   .change-tooltip-item {
-    grid-template-columns: 1fr;
     justify-items: start;
   }
 
@@ -1010,5 +1014,9 @@ td.duty-td-restroom.month-passed .duty-btn {
     display: flex;
     flex-wrap: nowrap;
     flex-direction: column;
+  }
+
+  .header-buttons button{
+    font-size: 1.4rem;
   }
 }
