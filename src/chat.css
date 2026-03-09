@@ -113,6 +113,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding-bottom: 77px;
 }
 
 /* 입장 후 참여 현황 일회성 안내 */
@@ -263,6 +264,10 @@
 
 /* 입력 영역 */
 .chat-input-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   flex-shrink: 0;
   padding: 0.75rem 1rem;
   background: var(--chat-bubble-others);
