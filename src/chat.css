@@ -330,6 +330,7 @@
 
 textarea.chat-input {
   resize: none;
+  min-height: auto;
   vertical-align: middle;
 }
 
