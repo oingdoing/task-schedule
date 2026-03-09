@@ -735,6 +735,125 @@ td.duty-td-restroom.month-passed .duty-btn {
   width: min(380px, 100%);
 }
 
+/* 하단 우측 채팅하기 버튼 */
+.chat-fab {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 30;
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent, #0d7a6e);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(13, 122, 110, 0.35);
+}
+.chat-fab:hover {
+  filter: brightness(1.08);
+}
+.chat-fab:active {
+  transform: scale(0.98);
+}
+
+/* 채팅 모달 */
+.chat-modal {
+  width: min(420px, 100%);
+  max-height: 85vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.chat-modal .modal-header {
+  border-bottom: 1px solid #dce6ea;
+}
+.chat-modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.chat-messages {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.chat-messages-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted, #5a6b73);
+  text-align: center;
+  padding: 1.5rem;
+}
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+  max-width: 100%;
+}
+.chat-message-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted, #5a6b73);
+}
+.chat-message-body {
+  font-size: 0.9rem;
+  line-height: 1.4;
+  padding: 0.5rem 0.75rem;
+  background: #f0f6f8;
+  border-radius: 8px;
+  word-break: break-word;
+}
+.chat-input-wrap {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid #dce6ea;
+  background: #fff;
+}
+.chat-send-error {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--danger, #c62828);
+}
+.chat-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.chat-input:focus {
+  outline: none;
+  border-color: var(--accent, #0d7a6e);
+}
+.chat-send-btn {
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent, #0d7a6e);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.chat-send-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.chat-send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .substitute-context {
   margin: 0 0 0.5rem;
   font-size: 0.9rem;
