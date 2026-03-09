@@ -226,6 +226,7 @@ export default function ChatPage() {
   };
 
   const handleSendText = async () => {
+    if (loading) return;
     const text = input.trim();
     if (!text || !userId || !nickname) return;
     setLoading(true);
@@ -409,7 +410,6 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="입력하는 창"
-              disabled={loading}
               maxLength={2000}
               rows={2}
             />
