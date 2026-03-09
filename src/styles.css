@@ -216,7 +216,7 @@ textarea {
 }
 
 .year-nav button {
-  font-size: 1.4rem;
+  font-size: 14px;
 }
 
 .actions {
@@ -1018,6 +1018,6 @@ td.duty-td-restroom.month-passed .duty-btn {
   }
 
   .header-buttons button{
-    font-size: 1.4rem;
+    font-size: 14px;
   }
 }
