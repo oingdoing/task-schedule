@@ -1,0 +1,350 @@
+/* 채팅 페이지 전용 스타일 (공용 채팅, 새 창 430x800) */
+.chat-page {
+  --chat-bg: #e8f4fc;
+  --chat-bubble-mine: #fff9c4;
+  --chat-bubble-others: #fff;
+  --chat-system-bg: #e0e0e0;
+  --chat-line: var(--line, #d3dde4);
+  --chat-accent: var(--brand, #62aa9e);
+  font-family: inherit;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--chat-bg);
+  color: #1f2b2d;
+}
+
+.chat-page--nickname {
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.chat-nickname-card {
+  background: var(--chat-bubble-others);
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 320px;
+}
+
+.chat-nickname-title {
+  margin: 0 0 1.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chat-nickname-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-nickname-input {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--chat-line);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.chat-nickname-submit {
+  padding: 0.6rem 1rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--chat-accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.chat-nickname-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.chat-nickname-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 헤더 */
+.chat-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--chat-bubble-others);
+  border-bottom: 1px solid var(--chat-line);
+}
+
+.chat-header-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.chat-header-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.1rem;
+  color: #5c6d74;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.chat-header-close:hover {
+  background: #f0f6f8;
+  color: #1f2b2d;
+}
+
+/* 본문 */
+.chat-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 입장 후 참여 현황 일회성 안내 */
+.chat-participant-notice {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--chat-system-bg);
+  border-bottom: 1px solid var(--chat-line);
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.chat-participant-notice-text {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-participant-notice-text strong {
+  color: #1f2b2d;
+}
+
+.chat-participant-notice-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: #666;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-participant-notice-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1f2b2d;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-messages-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-subtle, #5c6d74);
+  text-align: center;
+  padding: 1.5rem;
+}
+
+/* 메시지 공통 */
+.chat-message {
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.chat-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-subtle, #5c6d74);
+}
+
+.chat-message-name {
+  font-weight: 600;
+  color: #1f2b2d;
+}
+
+.chat-message-time {
+  font-size: 0.7rem;
+  color: var(--text-subtle, #5c6d74);
+}
+
+.chat-message-body {
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* 시스템 메시지 */
+.chat-message--system {
+  align-self: center;
+  max-width: 90%;
+}
+
+.chat-message-body--system {
+  background: var(--chat-system-bg);
+  color: #555;
+  text-align: center;
+}
+
+/* 내 메시지 (우측) */
+.chat-message--mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chat-message--mine .chat-message-body {
+  background: var(--chat-bubble-mine);
+}
+
+.chat-message--mine .chat-message-meta {
+  flex-direction: row-reverse;
+}
+
+/* 상대 메시지 (좌측) */
+.chat-message--others {
+  align-self: flex-start;
+}
+
+.chat-message--others .chat-message-body {
+  background: var(--chat-bubble-others);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.chat-message-image-wrap {
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 240px;
+}
+
+.chat-message-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  vertical-align: top;
+}
+
+/* 입력 영역 */
+.chat-input-wrap {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem;
+  background: var(--chat-bubble-others);
+  border-top: 1px solid var(--chat-line);
+}
+
+.chat-send-error {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--danger, #c62828);
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.chat-file-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chat-add-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #fff;
+  background: #5c6d74;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.chat-add-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.chat-add-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--chat-line);
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--chat-accent);
+}
+
+.chat-send-btn {
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--chat-accent);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -12,7 +12,6 @@ import EntryGate from './components/EntryGate';
 import AdminCodeModal from './components/AdminCodeModal';
 import UsageGuideModal from './components/UsageGuideModal';
 import ViewRosterModal from './components/ViewRosterModal';
-import ChatModal from './components/ChatModal';
 import { useSwapMode } from './hooks/useSwapMode';
 import initialDataJson from './data/schedule.json';
 import type {
@@ -271,7 +270,6 @@ export default function App() {
   const [isSubstituteModalOpen, setSubstituteModalOpen] = useState(false);
   const [isUsageGuideOpen, setUsageGuideOpen] = useState(false);
   const [isViewRosterOpen, setViewRosterOpen] = useState(false);
-  const [isChatOpen, setChatOpen] = useState(false);
   const [hasEditLock, setHasEditLock] = useState(false);
   const hasEditLockRef = useRef(false);
   const skipNextSaveRef = useRef(false);
@@ -883,16 +881,17 @@ export default function App() {
       <button
         type="button"
         className="chat-fab"
-        onClick={() => setChatOpen(true)}
+        onClick={() =>
+          window.open(
+            'chat.html',
+            '_blank',
+            'width=430,height=800,scrollbars=yes,resizable=yes',
+          )
+        }
         aria-label="채팅하기"
       >
         채팅하기
       </button>
-
-      <ChatModal
-        isOpen={isChatOpen}
-        onClose={() => setChatOpen(false)}
-      />
     </div>
   );
 }
