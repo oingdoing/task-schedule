@@ -756,6 +756,7 @@ td.duty-td-restroom.month-passed .duty-btn {
   border-radius: 999px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(13, 122, 110, 0.35);
+  display:none;
 }
 .chat-fab:hover {
   filter: brightness(1.08);
