@@ -29,6 +29,7 @@ export default function ChatPage() {
     nicknames: string[];
   } | null>(null);
   const listEndRef = useRef<HTMLDivElement>(null);
+  const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -145,6 +146,43 @@ export default function ChatPage() {
   }, [messages]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+
+    const updateForKeyboard = () => {
+      const el = inputWrapRef.current;
+      if (!el) return;
+
+      // 데스크톱에서는 기본 fixed bottom 동작 유지
+      if (window.innerWidth > 768) {
+        el.style.transform = '';
+        return;
+      }
+
+      const layoutHeight = window.innerHeight;
+      const visibleHeight = viewport.height;
+      const offsetTop = viewport.offsetTop;
+      const keyboardHeight = layoutHeight - (visibleHeight + offsetTop);
+
+      // 키패드가 충분히 올라온 경우에만 입력창을 키패드 높이만큼 위로 이동
+      if (keyboardHeight > 80) {
+        el.style.transform = `translateY(-${keyboardHeight}px)`;
+      } else {
+        el.style.transform = '';
+      }
+    };
+
+    viewport.addEventListener('resize', updateForKeyboard);
+    viewport.addEventListener('scroll', updateForKeyboard);
+    updateForKeyboard();
+
+    return () => {
+      viewport.removeEventListener('resize', updateForKeyboard);
+      viewport.removeEventListener('scroll', updateForKeyboard);
+    };
+  }, []);
+
+  useEffect(() => {
     const onBeforeUnload = () => {
       sendLeaveMessage();
     };
@@ -201,7 +239,6 @@ export default function ChatPage() {
     });
     setLoading(false);
     if (error) setSendError(error.message);
-    setTimeout(() => messageInputRef.current?.focus(), 0);
   };
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,7 +255,6 @@ export default function ChatPage() {
     if (uploadError) {
       setSendError(uploadError.message);
       setLoading(false);
-      setTimeout(() => messageInputRef.current?.focus(), 0);
       return;
     }
     const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
@@ -231,7 +267,6 @@ export default function ChatPage() {
     });
     setLoading(false);
     if (insertError) setSendError(insertError.message);
-    setTimeout(() => messageInputRef.current?.focus(), 0);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -343,7 +378,7 @@ export default function ChatPage() {
           <div ref={listEndRef} />
         </div>
 
-        <div className="chat-input-wrap">
+        <div className="chat-input-wrap" ref={inputWrapRef}>
           {sendError && (
             <p className="chat-send-error" role="alert">
               {sendError}
@@ -382,6 +417,8 @@ export default function ChatPage() {
               type="button"
               className="chat-send-btn"
               onClick={handleSendText}
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.preventDefault()}
               disabled={loading || !input.trim()}
               aria-label="전송"
             >
