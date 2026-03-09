@@ -9,6 +9,7 @@
   --chat-accent: var(--brand, #62aa9e);
   font-family: inherit;
   height: 100dvh;
+  padding-top:57px;
   display: flex;
   flex-direction: column;
   background: var(--chat-bg);
@@ -72,6 +73,7 @@
 
 /* 헤더 */
 .chat-header {
+  position:fixed;top:0;left:0;right:0;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
