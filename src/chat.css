@@ -10,6 +10,7 @@
   font-family: inherit;
   height: 100dvh;
   padding-top:57px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   background: var(--chat-bg);
