@@ -7,8 +7,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 const HEARTBEAT_INTERVAL_MS = 10 * 1000; // 10초
 const INACTIVE_AFTER_MS = 30 * 1000; // 30초 미갱신 시 inactive
 const INACTIVE_LAST_SEEN = '2000-01-01T00:00:00.000Z'; // X 버튼 나가기 시 즉시 inactive
-/** 직접 접속(창이 아닌 탭/주소 입력) 시 나가기 후 이동할 경로. window.opener 없을 때 사용 */
-const CHAT_EXIT_FALLBACK_PATH = '/';
+const AUTO_LEAVE_INACTIVE_MS = 30 * 60 * 1000; // 30분 무활동 시 자동 퇴장
+const AUTO_LEAVE_CHECK_INTERVAL_MS = 60 * 1000; // 1분마다 무활동 여부 확인
 
 function escapeHtml(s: string): string {
   return s
@@ -48,6 +48,7 @@ export default function ChatPage() {
   const participantTimersRef = useRef<{
     heartbeat: ReturnType<typeof setInterval>;
     participants: ReturnType<typeof setInterval>;
+    autoLeave: ReturnType<typeof setInterval>;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -58,6 +59,9 @@ export default function ChatPage() {
   const [participantPopupOpen, setParticipantPopupOpen] = useState(false);
   const [changeNicknameOpen, setChangeNicknameOpen] = useState(false);
   const [changeNicknameInput, setChangeNicknameInput] = useState('');
+  /** 퇴장 후 이름 입력 화면에 표시할 안내(자동 퇴장 등) */
+  const [leaveNoticeMessage, setLeaveNoticeMessage] = useState<string | null>(null);
+  const lastActivityAtRef = useRef<number>(Date.now());
 
   const sendLeaveMessage = useCallback(async () => {
     if (leaveSentRef.current) return;
@@ -75,8 +79,9 @@ export default function ChatPage() {
     }
   }, []);
 
-  const handleClose = useCallback(() => {
-    (async () => {
+  /** 퇴장 처리 후 이름 입력 화면으로 전환. noticeMessage 있으면 해당 안내 문구 표시(자동 퇴장 등) */
+  const performLeave = useCallback(
+    async (noticeMessage?: string) => {
       if (userId) {
         await supabase
           .from('chat_participants')
@@ -84,13 +89,24 @@ export default function ChatPage() {
           .eq('user_id', userId);
       }
       await sendLeaveMessage();
-      if (window.opener != null) {
-        window.close();
-      } else {
-        window.location.href = CHAT_EXIT_FALLBACK_PATH;
-      }
-    })();
-  }, [sendLeaveMessage, userId]);
+      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(NICKNAME_KEY);
+      leaveSentRef.current = false;
+      setNicknameState(null);
+      setNicknameInput('');
+      setParticipantNotice(null);
+      setMessages([]);
+      setInput('');
+      setSendError(null);
+      setParticipantPopupOpen(false);
+      setChangeNicknameOpen(false);
+      setLeaveNoticeMessage(noticeMessage ?? null);
+    },
+    [sendLeaveMessage, userId],
+  );
+
+  const handleClose = useCallback(() => {
+    void performLeave();
+  }, [performLeave]);
 
   useEffect(() => {
     (async () => {
@@ -105,6 +121,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!nickname || !userId) return;
     let mounted = true;
+    lastActivityAtRef.current = Date.now();
 
     (async () => {
       let joinedAt: string | null = null;
@@ -167,7 +184,15 @@ export default function ChatPage() {
       await fetchActiveParticipants();
       const heartbeatTimer = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
       const participantsTimer = setInterval(fetchActiveParticipants, HEARTBEAT_INTERVAL_MS);
-      participantTimersRef.current = { heartbeat: heartbeatTimer, participants: participantsTimer };
+      const autoLeaveTimer = setInterval(() => {
+        if (!mounted || Date.now() - lastActivityAtRef.current < AUTO_LEAVE_INACTIVE_MS) return;
+        void performLeave('장시간 활동이 없어 채팅방에서 퇴장되었습니다.');
+      }, AUTO_LEAVE_CHECK_INTERVAL_MS);
+      participantTimersRef.current = {
+        heartbeat: heartbeatTimer,
+        participants: participantsTimer,
+        autoLeave: autoLeaveTimer,
+      };
 
       const channel = supabase
         .channel('chat-messages')
@@ -199,12 +224,13 @@ export default function ChatPage() {
       if (timers) {
         clearInterval(timers.heartbeat);
         clearInterval(timers.participants);
+        if (timers.autoLeave) clearInterval(timers.autoLeave);
         participantTimersRef.current = null;
       }
       channelRef.current?.unsubscribe();
       channelRef.current = null;
     };
-  }, [nickname, userId]);
+  }, [nickname, userId, performLeave]);
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -263,6 +289,7 @@ export default function ChatPage() {
 
   const handleNicknameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLeaveNoticeMessage(null);
     const nick = nicknameInput.trim();
     if (!nick) return;
     await ensureAnonymousSession();
@@ -296,6 +323,7 @@ export default function ChatPage() {
 
   const handleChangeNicknameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    lastActivityAtRef.current = Date.now();
     const newNick = changeNicknameInput.trim();
     if (!newNick || !userId || !nickname) return;
     if (newNick === nickname) {
@@ -326,6 +354,7 @@ export default function ChatPage() {
 
   const handleSendText = async () => {
     if (loading) return;
+    lastActivityAtRef.current = Date.now();
     const raw =
       (typeof messageInputRef.current?.value !== 'undefined' && messageInputRef.current?.value !== null
         ? messageInputRef.current.value
@@ -354,6 +383,7 @@ export default function ChatPage() {
         setSendError('이미지는 5MB 이하여야 합니다.');
         return;
       }
+      lastActivityAtRef.current = Date.now();
       setLoading(true);
       setSendError(null);
       const ext = file.name.split('.').pop() || 'jpg';
@@ -431,6 +461,11 @@ export default function ChatPage() {
       <div className="chat-page chat-page--nickname">
         <div className="chat-nickname-card">
           <h1 className="chat-nickname-title">이름을 입력하세요</h1>
+          {leaveNoticeMessage && (
+            <p className="chat-nickname-leave-notice" role="status">
+              {leaveNoticeMessage}
+            </p>
+          )}
           <form onSubmit={handleNicknameSubmit} className="chat-nickname-form">
             <input
               type="text"
