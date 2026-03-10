@@ -396,6 +396,18 @@
   white-space: pre-wrap;
 }
 
+.chat-message-body-link {
+  color: var(--chat-accent);
+  text-decoration: underline;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.chat-message-body-link:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
 /* 시스템 메시지 */
 .chat-message--system {
   align-self: center;

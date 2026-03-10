@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ensureAnonymousSession, supabase } from '../lib/supabase';
 
@@ -16,6 +17,43 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** http/https URL만 링크로 변환. XSS 방지를 위해 프로토콜 제한, 새 탭 열기 */
+function linkifyMessageBody(body: string, messageId: string): (string | ReactNode)[] {
+  if (body == null || body === '') return [];
+  const parts: (string | React.ReactNode)[] = [];
+  const urlRe = /(https?:\/\/[^\s<>"']+)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let keyIndex = 0;
+  while ((match = urlRe.exec(body)) !== null) {
+    const raw = match[1];
+    const href = raw.startsWith('http://') || raw.startsWith('https://') ? raw : null;
+    if (lastIndex < match.index) {
+      parts.push(body.slice(lastIndex, match.index));
+    }
+    if (href) {
+      parts.push(
+        <a
+          key={`${messageId}-link-${keyIndex++}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="chat-message-body-link"
+        >
+          {raw}
+        </a>,
+      );
+    } else {
+      parts.push(raw);
+    }
+    lastIndex = urlRe.lastIndex;
+  }
+  if (lastIndex < body.length) {
+    parts.push(body.slice(lastIndex));
+  }
+  return parts.length > 0 ? parts : [body];
 }
 
 export interface ChatMessageRow {
@@ -642,7 +680,9 @@ export default function ChatPage() {
                   </a>
                 )}
                 {msg.body != null && msg.body !== '' && (
-                  <span className="chat-message-body">{msg.body}</span>
+                  <span className="chat-message-body">
+                    {linkifyMessageBody(msg.body, msg.id)}
+                  </span>
                 )}
               </div>
             );
