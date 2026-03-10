@@ -7,6 +7,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 const HEARTBEAT_INTERVAL_MS = 10 * 1000; // 10초
 const INACTIVE_AFTER_MS = 30 * 1000; // 30초 미갱신 시 inactive
 const INACTIVE_LAST_SEEN = '2000-01-01T00:00:00.000Z'; // X 버튼 나가기 시 즉시 inactive
+/** 직접 접속(창이 아닌 탭/주소 입력) 시 나가기 후 이동할 경로. window.opener 없을 때 사용 */
+const CHAT_EXIT_FALLBACK_PATH = '/';
 
 function escapeHtml(s: string): string {
   return s
@@ -82,7 +84,11 @@ export default function ChatPage() {
           .eq('user_id', userId);
       }
       await sendLeaveMessage();
-      window.close();
+      if (window.opener != null) {
+        window.close();
+      } else {
+        window.location.href = CHAT_EXIT_FALLBACK_PATH;
+      }
     })();
   }, [sendLeaveMessage, userId]);
 
@@ -174,6 +180,13 @@ export default function ChatPage() {
             if (!mounted || !joined) return;
             if (new Date(newRow.created_at) < new Date(joined)) return;
             setMessages((prev) => [...prev, newRow]);
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'chat_participants' },
+          () => {
+            if (mounted) fetchActiveParticipants();
           },
         )
         .subscribe();
