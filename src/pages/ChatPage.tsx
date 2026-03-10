@@ -3,6 +3,7 @@ import { ensureAnonymousSession, supabase } from '../lib/supabase';
 
 const NICKNAME_KEY = 'chat_nickname';
 const BUCKET = 'chat-images';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
 export interface ChatMessageRow {
   id: string;
@@ -33,9 +34,11 @@ export default function ChatPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const skipNextChangeRef = useRef(false);
   const leaveSentRef = useRef(false);
-  const participantNoticeShownRef = useRef(false);
   const joinedAtRef = useRef<string | null>(null);
+  const participantPopupRef = useRef<HTMLDivElement>(null);
+  const [participantPopupOpen, setParticipantPopupOpen] = useState(false);
 
   const sendLeaveMessage = useCallback(async () => {
     if (leaveSentRef.current) return;
@@ -73,7 +76,6 @@ export default function ChatPage() {
   useEffect(() => {
     if (!nickname || !userId) return;
     let mounted = true;
-    participantNoticeShownRef.current = false;
 
     (async () => {
       let joinedAt: string | null = null;
@@ -114,7 +116,7 @@ export default function ChatPage() {
           },
         )
         .on('presence', { event: 'sync' }, () => {
-          if (!mounted || participantNoticeShownRef.current) return;
+          if (!mounted) return;
           const state = channel.presenceState();
           const presences = (Object.values(state).flat() as { nickname?: string; user_id?: string }[])
             .filter((p) => p.user_id && p.nickname);
@@ -122,8 +124,9 @@ export default function ChatPage() {
           for (const p of presences) byUser.set(p.user_id!, p.nickname!);
           const nicknames = Array.from(byUser.values()).sort();
           if (nicknames.length >= 1) {
-            participantNoticeShownRef.current = true;
             setParticipantNotice({ count: nicknames.length, nicknames });
+          } else {
+            setParticipantNotice(null);
           }
         })
         .subscribe(async (status) => {
@@ -144,6 +147,20 @@ export default function ChatPage() {
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!participantPopupOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const el = participantPopupRef.current;
+      const target = e.target as Node;
+      const trigger = target instanceof Element ? target.closest('.chat-participant-trigger') : null;
+      if (el && !el.contains(target) && !trigger) {
+        setParticipantPopupOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [participantPopupOpen]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
@@ -227,11 +244,16 @@ export default function ChatPage() {
 
   const handleSendText = async () => {
     if (loading) return;
-    const text = input.trim();
+    const raw =
+      (typeof messageInputRef.current?.value !== 'undefined' && messageInputRef.current?.value !== null
+        ? messageInputRef.current.value
+        : input);
+    const text = raw.trim();
     if (!text || !userId || !nickname) return;
     setLoading(true);
     setSendError(null);
     setInput('');
+    skipNextChangeRef.current = true;
     const { error } = await supabase.from('messages').insert({
       message_type: 'user',
       sender_id: userId,
@@ -242,40 +264,85 @@ export default function ChatPage() {
     if (error) setSendError(error.message);
   };
 
+  const uploadImageAndSend = useCallback(
+    async (file: File) => {
+      if (!userId || !nickname) return;
+      if (!file.type.startsWith('image/')) return;
+      if (file.size > MAX_IMAGE_BYTES) {
+        setSendError('이미지는 5MB 이하여야 합니다.');
+        return;
+      }
+      setLoading(true);
+      setSendError(null);
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, {
+        contentType: file.type,
+      });
+      if (uploadError) {
+        setSendError(uploadError.message);
+        setLoading(false);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      const { error: insertError } = await supabase.from('messages').insert({
+        message_type: 'user',
+        sender_id: userId,
+        sender_nickname: nickname,
+        body: '',
+        image_url: urlData.publicUrl,
+      });
+      setLoading(false);
+      if (insertError) setSendError(insertError.message);
+    },
+    [userId, nickname],
+  );
+
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !file.type.startsWith('image/') || !userId || !nickname) return;
-    setLoading(true);
-    setSendError(null);
-    const ext = file.name.split('.').pop() || 'jpg';
-    const path = `${userId}/${crypto.randomUUID()}.${ext}`;
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, {
-      contentType: file.type,
-    });
-    if (uploadError) {
-      setSendError(uploadError.message);
-      setLoading(false);
-      return;
-    }
-    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    const { error: insertError } = await supabase.from('messages').insert({
-      message_type: 'user',
-      sender_id: userId,
-      sender_nickname: nickname,
-      body: '',
-      image_url: urlData.publicUrl,
-    });
-    setLoading(false);
-    if (insertError) setSendError(insertError.message);
+    if (!file) return;
+    await uploadImageAndSend(file);
   };
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      let imageFile: File | null = null;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          imageFile = item.getAsFile();
+          break;
+        }
+      }
+      if (imageFile) {
+        e.preventDefault();
+        uploadImageAndSend(imageFile);
+        const text = e.clipboardData.getData('text');
+        if (text) setInput((prev) => prev + text);
+      }
+    },
+    [uploadImageAndSend],
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.nativeEvent.isComposing) return;
       e.preventDefault();
       handleSendText();
     }
   };
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (skipNextChangeRef.current) {
+      skipNextChangeRef.current = false;
+      setInput('');
+      return;
+    }
+    setInput(e.target.value);
+  }, []);
 
   if (nickname === null || nickname === '') {
     return (
@@ -304,7 +371,7 @@ export default function ChatPage() {
   return (
     <div className="chat-page">
       <header className="chat-header">
-        <h1 className="chat-header-title">채팅</h1>
+        <h1 className="chat-header-title">😎 맹챗</h1>
         <button
           type="button"
           className="chat-header-close"
@@ -318,18 +385,48 @@ export default function ChatPage() {
       <div className="chat-body">
         {participantNotice && (
           <div className="chat-participant-notice" role="status">
-            <p className="chat-participant-notice-text">
-              현재 <strong>{participantNotice.count}명</strong> 참여 중:{' '}
-              {participantNotice.nicknames.join(', ')}
-            </p>
             <button
               type="button"
-              className="chat-participant-notice-close"
-              onClick={() => setParticipantNotice(null)}
-              aria-label="닫기"
+              className="chat-participant-trigger"
+              onClick={() => setParticipantPopupOpen((open) => !open)}
+              aria-expanded={participantPopupOpen}
+              aria-haspopup="dialog"
+              aria-label="참여자 목록 보기"
             >
-              ✕
+              <span className="chat-participant-trigger-text">
+                현재 <strong>{participantNotice.count}명</strong> 참여 중
+              </span>
+              <span className="chat-participant-trigger-icon" aria-hidden>
+                {participantPopupOpen ? '▲' : '▼'}
+              </span>
             </button>
+            {participantPopupOpen && (
+              <div
+                ref={participantPopupRef}
+                className="chat-participant-popup"
+                role="dialog"
+                aria-label="참여자 목록"
+              >
+                <div className="chat-participant-popup-header">
+                  <span className="chat-participant-popup-title">참여자</span>
+                  <button
+                    type="button"
+                    className="chat-participant-popup-close"
+                    onClick={() => setParticipantPopupOpen(false)}
+                    aria-label="닫기"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <ul className="chat-participant-popup-list">
+                  {participantNotice.nicknames.map((name) => (
+                    <li key={name} className="chat-participant-popup-item">
+                      {name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
         <div className="chat-messages">
@@ -407,8 +504,9 @@ export default function ChatPage() {
               ref={messageInputRef}
               className="chat-input"
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder="입력하는 창"
               maxLength={2000}
               rows={2}
