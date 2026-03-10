@@ -39,6 +39,8 @@ export default function ChatPage() {
   const joinedAtRef = useRef<string | null>(null);
   const participantPopupRef = useRef<HTMLDivElement>(null);
   const [participantPopupOpen, setParticipantPopupOpen] = useState(false);
+  const [changeNicknameOpen, setChangeNicknameOpen] = useState(false);
+  const [changeNicknameInput, setChangeNicknameInput] = useState('');
 
   const sendLeaveMessage = useCallback(async () => {
     if (leaveSentRef.current) return;
@@ -242,6 +244,40 @@ export default function ChatPage() {
       .then(() => {});
   };
 
+  const openChangeNickname = useCallback(() => {
+    setChangeNicknameInput(nickname ?? '');
+    setChangeNicknameOpen(true);
+  }, [nickname]);
+
+  const handleChangeNicknameSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newNick = changeNicknameInput.trim();
+    if (!newNick || !userId || !nickname) return;
+    if (newNick === nickname) {
+      setChangeNicknameOpen(false);
+      return;
+    }
+    const inUse = participantNotice?.nicknames?.includes(newNick) ?? false;
+    if (inUse) {
+      alert('이미 사용중인 닉네임입니다');
+      return;
+    }
+    const joinedAt = joinedAtRef.current ?? new Date().toISOString();
+    await supabase.from('chat_participants').upsert(
+      { user_id: userId, nickname: newNick, joined_at: joinedAt },
+      { onConflict: 'user_id' },
+    );
+    await supabase.from('messages').insert({
+      message_type: 'system',
+      body: `${nickname}님이 ${newNick}으로 닉네임을 변경했습니다.`,
+      sender_id: null,
+    });
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(NICKNAME_KEY, newNick);
+    setNicknameState(newNick);
+    setChangeNicknameOpen(false);
+    setChangeNicknameInput('');
+  };
+
   const handleSendText = async () => {
     if (loading) return;
     const raw =
@@ -372,15 +408,69 @@ export default function ChatPage() {
     <div className="chat-page">
       <header className="chat-header">
         <h1 className="chat-header-title">😎 맹챗</h1>
-        <button
-          type="button"
-          className="chat-header-close"
-          onClick={handleClose}
-          aria-label="나가기"
-        >
-          ✕
-        </button>
+        <div className="chat-header-actions">
+          <button
+            type="button"
+            className="chat-header-nickname-btn"
+            onClick={openChangeNickname}
+            aria-label="닉네임 변경"
+          >
+            <span className="chat-header-nickname-label">✏️ 이름 변경</span>
+          </button>
+          <button
+            type="button"
+            className="chat-header-close"
+            onClick={handleClose}
+            aria-label="나가기"
+          >
+            ✕
+          </button>
+        </div>
       </header>
+
+      {changeNicknameOpen && (
+        <div
+          className="chat-change-nickname-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="닉네임 변경"
+          onClick={() => setChangeNicknameOpen(false)}
+        >
+          <div
+            className="chat-change-nickname-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="chat-change-nickname-title">닉네임 변경</h2>
+            <form onSubmit={handleChangeNicknameSubmit} className="chat-change-nickname-form">
+              <input
+                type="text"
+                className="chat-nickname-input"
+                value={changeNicknameInput}
+                onChange={(e) => setChangeNicknameInput(e.target.value)}
+                placeholder="새 닉네임"
+                maxLength={20}
+                autoFocus
+              />
+              <div className="chat-change-nickname-buttons">
+                <button
+                  type="button"
+                  className="chat-change-nickname-cancel"
+                  onClick={() => setChangeNicknameOpen(false)}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="chat-nickname-submit"
+                  disabled={!changeNicknameInput.trim()}
+                >
+                  확인
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="chat-body">
         {participantNotice && (

@@ -73,6 +73,71 @@
   cursor: not-allowed;
 }
 
+/* 닉네임 변경 모달 */
+.chat-change-nickname-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.chat-change-nickname-card {
+  background: var(--chat-bubble-others);
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 100%;
+  max-width: 300px;
+}
+
+.chat-change-nickname-title {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chat-change-nickname-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-change-nickname-form .chat-nickname-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.chat-change-nickname-buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.chat-change-nickname-cancel {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+  color: #5c6d74;
+  background: transparent;
+  border: 1px solid var(--chat-line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.chat-change-nickname-cancel:hover {
+  background: #f0f6f8;
+  color: #1f2b2d;
+}
+
+.chat-change-nickname-buttons .chat-nickname-submit {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+}
+
 /* 헤더 */
 .chat-header {
   position:fixed;top:0;left:0;right:0;
@@ -89,7 +154,37 @@
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
-  text-align: center;
+}
+
+.chat-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.chat-header-nickname-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  color: #5c6d74;
+  background: transparent;
+  border: 1px solid var(--chat-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.chat-header-nickname-btn:hover {
+  background: #f0f6f8;
+  color: #1f2b2d;
+}
+
+.chat-header-nickname-label {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-header-close {
@@ -298,9 +393,10 @@
 }
 
 .chat-message-body--system {
-  background: #faf6e9;
+  background: #d2e4f0;
   color: #343434;
   text-align: center;
+  word-break: keep-all;
 }
 
 /* 내 메시지 (우측) */
