@@ -4,6 +4,9 @@ import { ensureAnonymousSession, supabase } from '../lib/supabase';
 const NICKNAME_KEY = 'chat_nickname';
 const BUCKET = 'chat-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+const HEARTBEAT_INTERVAL_MS = 10 * 1000; // 10초
+const INACTIVE_AFTER_MS = 30 * 1000; // 30초 미갱신 시 inactive
+const INACTIVE_LAST_SEEN = '2000-01-01T00:00:00.000Z'; // X 버튼 나가기 시 즉시 inactive
 
 function escapeHtml(s: string): string {
   return s
@@ -40,6 +43,10 @@ export default function ChatPage() {
   const listEndRef = useRef<HTMLDivElement>(null);
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const participantTimersRef = useRef<{
+    heartbeat: ReturnType<typeof setInterval>;
+    participants: ReturnType<typeof setInterval>;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const skipNextChangeRef = useRef(false);
@@ -68,10 +75,16 @@ export default function ChatPage() {
 
   const handleClose = useCallback(() => {
     (async () => {
+      if (userId) {
+        await supabase
+          .from('chat_participants')
+          .update({ last_seen_at: INACTIVE_LAST_SEEN })
+          .eq('user_id', userId);
+      }
       await sendLeaveMessage();
       window.close();
     })();
-  }, [sendLeaveMessage]);
+  }, [sendLeaveMessage, userId]);
 
   useEffect(() => {
     (async () => {
@@ -94,12 +107,17 @@ export default function ChatPage() {
         .select('joined_at')
         .eq('user_id', userId)
         .single();
+      const now = new Date().toISOString();
       if (participant?.joined_at) {
         joinedAt = participant.joined_at;
+        await supabase
+          .from('chat_participants')
+          .update({ last_seen_at: now })
+          .eq('user_id', userId);
       } else {
-        joinedAt = new Date().toISOString();
+        joinedAt = now;
         await supabase.from('chat_participants').upsert(
-          { user_id: userId, nickname, joined_at: joinedAt },
+          { user_id: userId, nickname, joined_at: joinedAt, last_seen_at: now },
           { onConflict: 'user_id' },
         );
       }
@@ -111,6 +129,39 @@ export default function ChatPage() {
         .order('created_at', { ascending: true });
 
       if (mounted && !error) setMessages(rows ?? []);
+
+      const fetchActiveParticipants = async () => {
+        if (!mounted) return;
+        const since = new Date(Date.now() - INACTIVE_AFTER_MS).toISOString();
+        const { data: participants } = await supabase
+          .from('chat_participants')
+          .select('user_id, nickname')
+          .gte('last_seen_at', since);
+        if (!mounted) return;
+        const byUser = new Map<string, string>();
+        for (const p of participants ?? []) {
+          if (p.user_id && p.nickname) byUser.set(p.user_id, p.nickname);
+        }
+        const nicknames = Array.from(byUser.values()).sort();
+        if (nicknames.length >= 1) {
+          setParticipantNotice({ count: nicknames.length, nicknames });
+        } else {
+          setParticipantNotice(null);
+        }
+      };
+
+      const heartbeat = async () => {
+        if (!mounted) return;
+        await supabase
+          .from('chat_participants')
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq('user_id', userId);
+      };
+
+      await fetchActiveParticipants();
+      const heartbeatTimer = setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
+      const participantsTimer = setInterval(fetchActiveParticipants, HEARTBEAT_INTERVAL_MS);
+      participantTimersRef.current = { heartbeat: heartbeatTimer, participants: participantsTimer };
 
       const channel = supabase
         .channel('chat-messages')
@@ -125,30 +176,18 @@ export default function ChatPage() {
             setMessages((prev) => [...prev, newRow]);
           },
         )
-        .on('presence', { event: 'sync' }, () => {
-          if (!mounted) return;
-          const state = channel.presenceState();
-          const presences = (Object.values(state).flat() as { nickname?: string; user_id?: string }[])
-            .filter((p) => p.user_id && p.nickname);
-          const byUser = new Map<string, string>();
-          for (const p of presences) byUser.set(p.user_id!, p.nickname!);
-          const nicknames = Array.from(byUser.values()).sort();
-          if (nicknames.length >= 1) {
-            setParticipantNotice({ count: nicknames.length, nicknames });
-          } else {
-            setParticipantNotice(null);
-          }
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            await channel.track({ nickname, user_id: userId });
-          }
-        });
+        .subscribe();
       channelRef.current = channel;
     })();
 
     return () => {
       mounted = false;
+      const timers = participantTimersRef.current;
+      if (timers) {
+        clearInterval(timers.heartbeat);
+        clearInterval(timers.participants);
+        participantTimersRef.current = null;
+      }
       channelRef.current?.unsubscribe();
       channelRef.current = null;
     };
@@ -209,21 +248,6 @@ export default function ChatPage() {
     };
   }, []);
 
-  useEffect(() => {
-    const onBeforeUnload = () => {
-      sendLeaveMessage();
-    };
-    const onPageHide = () => {
-      sendLeaveMessage();
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    window.addEventListener('pagehide', onPageHide);
-    return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      window.removeEventListener('pagehide', onPageHide);
-    };
-  }, [sendLeaveMessage]);
-
   const handleNicknameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const nick = nicknameInput.trim();
@@ -234,14 +258,14 @@ export default function ChatPage() {
     } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const joinedAt = new Date().toISOString();
+    const now = new Date().toISOString();
     await supabase.from('chat_participants').upsert(
-      { user_id: uid, nickname: nick, joined_at: joinedAt },
+      { user_id: uid, nickname: nick, joined_at: now, last_seen_at: now },
       { onConflict: 'user_id' },
     );
     sessionStorage.setItem(NICKNAME_KEY, nick);
     setNicknameState(nick);
-    joinedAtRef.current = joinedAt;
+    joinedAtRef.current = now;
     supabase
       .from('messages')
       .insert({
@@ -271,8 +295,9 @@ export default function ChatPage() {
       return;
     }
     const joinedAt = joinedAtRef.current ?? new Date().toISOString();
+    const now = new Date().toISOString();
     await supabase.from('chat_participants').upsert(
-      { user_id: userId, nickname: newNick, joined_at: joinedAt },
+      { user_id: userId, nickname: newNick, joined_at: joinedAt, last_seen_at: now },
       { onConflict: 'user_id' },
     );
     await supabase.from('messages').insert({
