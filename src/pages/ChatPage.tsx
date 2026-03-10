@@ -5,6 +5,14 @@ const NICKNAME_KEY = 'chat_nickname';
 const BUCKET = 'chat-images';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export interface ChatMessageRow {
   id: string;
   created_at: string;
@@ -259,7 +267,7 @@ export default function ChatPage() {
     }
     const inUse = participantNotice?.nicknames?.includes(newNick) ?? false;
     if (inUse) {
-      alert('이미 사용중인 닉네임입니다');
+      alert('이미 사용중인 이름입니다');
       return;
     }
     const joinedAt = joinedAtRef.current ?? new Date().toISOString();
@@ -269,7 +277,7 @@ export default function ChatPage() {
     );
     await supabase.from('messages').insert({
       message_type: 'system',
-      body: `${nickname}님이 ${newNick}으로 닉네임을 변경했습니다.`,
+      body: `<strong>${escapeHtml(nickname)}</strong>님이 <strong>${escapeHtml(newNick)}</strong>으로 이름을 변경했습니다.`,
       sender_id: null,
     });
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(NICKNAME_KEY, newNick);
@@ -384,14 +392,14 @@ export default function ChatPage() {
     return (
       <div className="chat-page chat-page--nickname">
         <div className="chat-nickname-card">
-          <h1 className="chat-nickname-title">닉네임을 입력하세요</h1>
+          <h1 className="chat-nickname-title">이름을 입력하세요</h1>
           <form onSubmit={handleNicknameSubmit} className="chat-nickname-form">
             <input
               type="text"
               className="chat-nickname-input"
               value={nicknameInput}
               onChange={(e) => setNicknameInput(e.target.value)}
-              placeholder="닉네임"
+              placeholder="이름"
               maxLength={20}
               autoFocus
             />
@@ -413,7 +421,7 @@ export default function ChatPage() {
             type="button"
             className="chat-header-nickname-btn"
             onClick={openChangeNickname}
-            aria-label="닉네임 변경"
+            aria-label="이름 변경"
           >
             <span className="chat-header-nickname-label">✏️ 이름 변경</span>
           </button>
@@ -433,21 +441,21 @@ export default function ChatPage() {
           className="chat-change-nickname-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label="닉네임 변경"
+          aria-label="이름 변경"
           onClick={() => setChangeNicknameOpen(false)}
         >
           <div
             className="chat-change-nickname-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="chat-change-nickname-title">닉네임 변경</h2>
+            <h2 className="chat-change-nickname-title">이름 변경</h2>
             <form onSubmit={handleChangeNicknameSubmit} className="chat-change-nickname-form">
               <input
                 type="text"
                 className="chat-nickname-input"
                 value={changeNicknameInput}
                 onChange={(e) => setChangeNicknameInput(e.target.value)}
-                placeholder="새 닉네임"
+                placeholder="새 이름"
                 maxLength={20}
                 autoFocus
               />
@@ -527,7 +535,10 @@ export default function ChatPage() {
             if (msg.message_type === 'system') {
               return (
                 <div key={msg.id} className="chat-message chat-message--system">
-                  <span className="chat-message-body chat-message-body--system">{msg.body}</span>
+                  <span
+                    className="chat-message-body chat-message-body--system"
+                    dangerouslySetInnerHTML={{ __html: msg.body ?? '' }}
+                  />
                 </div>
               );
             }
@@ -538,6 +549,7 @@ export default function ChatPage() {
                 className={`chat-message chat-message--${isMine ? 'mine' : 'others'}`}
               >
                 <div className="chat-message-meta">
+                  <span className="chat-message-name">{msg.sender_nickname ?? '알 수 없음'}</span>
                   <span className="chat-message-time">
                     {new Date(msg.created_at).toLocaleTimeString('ko-KR', {
                       hour: '2-digit',
@@ -545,7 +557,6 @@ export default function ChatPage() {
                       hour12: true,
                     })}
                   </span>
-                  <span className="chat-message-name">{msg.sender_nickname ?? '알 수 없음'}</span>
                 </div>
                 {msg.image_url && (
                   <a

@@ -73,7 +73,7 @@
   cursor: not-allowed;
 }
 
-/* 닉네임 변경 모달 */
+/* 이름 변경 모달 */
 .chat-change-nickname-backdrop {
   position: fixed;
   inset: 0;
@@ -220,7 +220,7 @@
   flex-shrink: 0;
   position: relative;
   padding: 0.2em 1rem;
-  background: var(--chat-system-bg-dark);
+  background: #bcd6e7;
   border-bottom: 1px solid var(--chat-line);
   font-size: 0.85rem;
   color: #555;
