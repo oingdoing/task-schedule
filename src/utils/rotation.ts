@@ -613,6 +613,47 @@ export function getScheduleLabelForNoDuty(slot: ScheduleSlot): string {
   return type;
 }
 
+const NON_DISH_SELECTABLE_DUTIES: SlotSelectableDuty[] = [
+  '피청',
+  '커청',
+  '건청',
+  '간식',
+  '본교팀장',
+];
+
+function getScheduleLabelTargetDuty(
+  slot: ScheduleSlot,
+  dutyEnabled: SlotDutyEnabled,
+): SlotSelectableDuty | null {
+  const scheduleLabel = getScheduleLabelForNoDuty(slot).trim();
+  if (!scheduleLabel) {
+    return null;
+  }
+
+  // 기본은 설거지 영역. 단, 설거지가 있고 다른 당번이 비어 있으면 그 빈 영역으로 이동.
+  if (!dutyEnabled.설거지) {
+    return '설거지';
+  }
+
+  const firstDisabledNonDishDuty = NON_DISH_SELECTABLE_DUTIES.find((duty) => !dutyEnabled[duty]);
+  return firstDisabledNonDishDuty ?? null;
+}
+
+function applyNoDutyAssignmentsByDetail(
+  assignments: DutyAssignments,
+  slot: ScheduleSlot,
+  dutyEnabled: SlotDutyEnabled,
+): void {
+  const scheduleLabel = getScheduleLabelForNoDuty(slot);
+  const targetDuty = getScheduleLabelTargetDuty(slot, dutyEnabled);
+
+  SLOT_SELECTABLE_DUTIES.forEach((duty) => {
+    if (!dutyEnabled[duty]) {
+      assignments[duty] = duty === targetDuty ? scheduleLabel : '';
+    }
+  });
+}
+
 /** 일정 메모 표시 텍스트 생성 (scheduleMemoType/scheduleMemoDetail 우선, noDutyMemo 폴백) */
 export function getScheduleMemoDisplay(slot: ScheduleSlot): string {
   if (slot.scheduleMemoType) {
@@ -780,6 +821,20 @@ function formatSwapLogDate(value: string): string {
   return `${date.getMonth() + 1}월 ${date.getDate()}일`;
 }
 
+function getSaturday(value: string): string {
+  const monday = getMonday(parseDate(value));
+  const saturday = new Date(monday);
+  saturday.setDate(monday.getDate() + 5);
+  return toISODate(saturday);
+}
+
+function getSwapLogDisplayDate(duty: DutyType, date: string): string {
+  if (duty === '피청' || duty === '커청' || duty === '건청') {
+    return getSaturday(date);
+  }
+  return date;
+}
+
 function addChangeNote(row: AssignmentRow, dutyType: DutyType, note: ChangeNote): void {
   const current = row.changeNotes[dutyType] ?? [];
   row.changeNotes[dutyType] = [...current, note];
@@ -837,9 +892,13 @@ function getMergeGroupIndices(
     }
 
     const currentValue = currentRow.assignments[duty];
+    const currentWeekKey = currentRow.weekKey;
     let end = index + 1;
     while (end < rows.length) {
       const nextRow = rows[end];
+      if (nextRow.weekKey !== currentWeekKey) {
+        break;
+      }
       const nextValue = nextRow.assignments[duty];
 
       if (mergeAcrossEmpty && isEmptyDutyValue(nextValue)) {
@@ -867,6 +926,50 @@ function getRestroomMergeGroupIndices(rows: AssignmentRow[], monthKey: string): 
     .filter((i) => i >= 0);
 }
 
+function dutyValueContainsPerson(
+  duty: DutyType,
+  value: string,
+  person: string,
+): boolean {
+  if (!person || !value || value === NOT_APPLICABLE || value.startsWith('당번 없음')) {
+    return false;
+  }
+  if (duty === '설거지' || duty === '화장실청소') {
+    const parsed = parseTeamWithMembers(value);
+    return parsed ? parsed.members.includes(person) : false;
+  }
+  if (duty === '건청') {
+    const members = parseCommaMembers(value);
+    return members ? members.includes(person) : false;
+  }
+  return value === person;
+}
+
+function findRowIndexForLogCell(
+  rows: AssignmentRow[],
+  indexBySlotId: Map<string, number>,
+  duty: DutyType,
+  cell: { slotId: string; person: string },
+): number {
+  const indexed = indexBySlotId.get(cell.slotId);
+  if (indexed !== undefined && indexed >= 0) {
+    const row = rows[indexed];
+    const value = row?.assignments[duty];
+    if (typeof value === 'string' && dutyValueContainsPerson(duty, value, cell.person)) {
+      return indexed;
+    }
+  }
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const value = rows[i].assignments[duty];
+    if (typeof value === 'string' && dutyValueContainsPerson(duty, value, cell.person)) {
+      return i;
+    }
+  }
+
+  return indexed ?? -1;
+}
+
 function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): AssignmentRow[] {
   if (logs.length === 0) {
     return rows;
@@ -878,28 +981,22 @@ function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): Assignme
     changeNotes: { ...row.changeNotes },
     changedPeople: { ...row.changedPeople },
   }));
-  const rowById = new Map(mapped.map((row) => [row.slot.id, row]));
   const indexBySlotId = new Map(mapped.map((row, i) => [row.slot.id, i]));
 
   logs.forEach((log) => {
-    const rowA = rowById.get(log.cellA.slotId);
-    const rowB = rowById.get(log.cellB.slotId);
-
-    if (!rowA || !rowB) {
+    const duty = log.dutyType;
+    const indexA = findRowIndexForLogCell(mapped, indexBySlotId, duty, log.cellA);
+    const indexB = findRowIndexForLogCell(mapped, indexBySlotId, duty, log.cellB);
+    if (indexA < 0 || indexB < 0) {
       return;
     }
+    const rowA = mapped[indexA];
+    const rowB = mapped[indexB];
 
-    const duty = log.dutyType;
     const currentA = rowA.assignments[duty as keyof DutyAssignments];
     const currentB = rowB.assignments[duty as keyof DutyAssignments];
 
     if (typeof currentA !== 'string' || typeof currentB !== 'string') {
-      return;
-    }
-
-    const indexA = indexBySlotId.get(log.cellA.slotId) ?? -1;
-    const indexB = indexBySlotId.get(log.cellB.slotId) ?? -1;
-    if (indexA < 0 || indexB < 0) {
       return;
     }
 
@@ -942,7 +1039,7 @@ function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): Assignme
       for (const i of indicesB) {
         mapped[i].assignments[duty as keyof DutyAssignments] = newValueB;
       }
-      const message = `${formatSwapLogDate(log.cellB.date)} ${log.cellB.person} ↔ ${formatSwapLogDate(log.cellA.date)} ${log.cellA.person}`;
+      const message = `${formatSwapLogDate(getSwapLogDisplayDate(duty, rowB.slot.date))} ${log.cellB.person} ↔ ${formatSwapLogDate(getSwapLogDisplayDate(duty, rowA.slot.date))} ${log.cellA.person}`;
       const note: ChangeNote = { logId: log.id, message };
       for (const i of indicesA) {
         addChangeNote(mapped[i], duty, note);
@@ -956,6 +1053,34 @@ function applyChangeLog(rows: AssignmentRow[], logs: ChangeLogEntry[]): Assignme
   });
 
   return mapped;
+}
+
+function enforceDutyEnabledMask(rows: AssignmentRow[]): AssignmentRow[] {
+  return rows.map((row) => {
+    if (!row.slot.hasDuty) {
+      return row;
+    }
+
+    const dutyEnabled = normalizeSlotDutyEnabled(row.slot.dutyEnabled);
+    const nextAssignments = { ...row.assignments };
+    const nextChangeNotes = { ...row.changeNotes };
+    const nextChangedPeople = { ...row.changedPeople };
+
+    applyNoDutyAssignmentsByDetail(nextAssignments, row.slot, dutyEnabled);
+    SLOT_SELECTABLE_DUTIES.forEach((duty) => {
+      if (!dutyEnabled[duty]) {
+        delete nextChangeNotes[duty];
+        delete nextChangedPeople[duty];
+      }
+    });
+
+    return {
+      ...row,
+      assignments: nextAssignments,
+      changeNotes: nextChangeNotes,
+      changedPeople: nextChangedPeople,
+    };
+  });
 }
 
 export function getDutyLabel(duty: DutyType): string {
@@ -1198,12 +1323,7 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
       }
     }
 
-    SLOT_SELECTABLE_DUTIES.forEach((duty) => {
-      if (!dutyEnabled[duty]) {
-        assignments[duty] =
-          duty === '설거지' ? getScheduleLabelForNoDuty(slot) : '';
-      }
-    });
+    applyNoDutyAssignmentsByDetail(assignments, slot, dutyEnabled);
 
     rows.push({
       slot,
@@ -1220,7 +1340,7 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     dutyIndex += 1;
   });
 
-  return applyChangeLog(rows, data.changeLog);
+  return enforceDutyEnabledMask(applyChangeLog(rows, data.changeLog));
 }
 
 export function matchesSearch(row: AssignmentRow, query: string): boolean {

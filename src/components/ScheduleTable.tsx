@@ -1,10 +1,11 @@
-import type { AssignmentRow, ChangeNote, DutyType, SwapDutyType } from '../types/schedule';
+import type { AssignmentRow, ChangeNote, DutyType, SlotSelectableDuty, SwapDutyType } from '../types/schedule';
 import {
   DUTY_COLUMNS,
   SWAPPABLE_DUTIES,
   getDutyLabel,
   getMonthLastDate,
   getWeekLastDate,
+  normalizeSlotDutyEnabled,
   parseTeamWithMembers,
   toISODate,
 } from '../utils/rotation';
@@ -36,8 +37,9 @@ interface DutyMergeMeta {
 
 const MERGEABLE_DUTIES: DutyType[] = ['피청', '커청', '건청', '간식', '본교팀장'];
 
-/** 주간 단위 담당: 빈 행 건너뛰고 병합 (피청·커청·간식) */
-const MERGE_ACROSS_EMPTY_DUTIES: DutyType[] = ['피청', '커청', '간식'];
+/** 주간 단위 담당: 빈 행 건너뛰고 병합 (피청·커청·건청·간식) */
+const MERGE_ACROSS_EMPTY_DUTIES: DutyType[] = ['피청', '커청', '건청', '간식'];
+const MERGE_EMPTY_DUTIES: DutyType[] = ['피청', '커청', '건청', '간식'];
 
 function isMergeCandidate(row: AssignmentRow, duty: DutyType): boolean {
   if (!row.slot.hasDuty) {
@@ -79,19 +81,36 @@ function buildDutyMergeMeta(rows: AssignmentRow[], duty: DutyType): DutyMergeMet
   const startRowSpan = new Map<number, number>();
   const hiddenRows = new Set<number>();
   const mergeAcrossEmpty = MERGE_ACROSS_EMPTY_DUTIES.includes(duty);
+  const mergeEmpty = MERGE_EMPTY_DUTIES.includes(duty);
 
   for (let index = 0; index < rows.length; ) {
     const currentRow = rows[index];
-    if (!isMergeCandidate(currentRow, duty)) {
+    const currentValue = currentRow.assignments[duty];
+    const currentIsEmpty =
+      mergeEmpty && currentRow.slot.hasDuty && isEmptyDutyValue(currentValue);
+
+    if (!isMergeCandidate(currentRow, duty) && !currentIsEmpty) {
       index += 1;
       continue;
     }
 
-    const currentValue = currentRow.assignments[duty];
+    const currentWeekKey = currentRow.weekKey;
     let end = index + 1;
     while (end < rows.length) {
       const nextRow = rows[end];
+      if (nextRow.weekKey !== currentWeekKey) {
+        break;
+      }
       const nextValue = nextRow.assignments[duty];
+      const nextIsEmpty = mergeEmpty && nextRow.slot.hasDuty && isEmptyDutyValue(nextValue);
+
+      if (currentIsEmpty) {
+        if (!nextIsEmpty) {
+          break;
+        }
+        end += 1;
+        continue;
+      }
 
       if (mergeAcrossEmpty && isEmptyDutyValue(nextValue)) {
         end += 1;
@@ -121,6 +140,12 @@ function isSwappable(duty: DutyType, row: AssignmentRow): duty is SwapDutyType {
     return false;
   }
   if (!SWAPPABLE_DUTIES.includes(duty as SwapDutyType)) {
+    return false;
+  }
+  if (
+    (duty === '피청' || duty === '커청' || duty === '건청' || duty === '간식') &&
+    !normalizeSlotDutyEnabled(row.slot.dutyEnabled)[duty as SlotSelectableDuty]
+  ) {
     return false;
   }
   const value = row.assignments[duty];

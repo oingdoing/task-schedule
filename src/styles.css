@@ -427,6 +427,9 @@ td.duty-td-restroom.month-passed .duty-btn {
   align-items: center;
   padding-left: 0.5rem;
 }
+.duty-cell-team:has(.dish-member-text){
+  padding-left:0;
+}
 
 .team-badge {
   display: inline-block;
@@ -443,6 +446,9 @@ td.duty-td-restroom.month-passed .duty-btn {
 .team-member-list {
   display: flex;
   gap: 0.32rem;
+}
+.team-member-list:has(.dish-member-text){
+  display: block;
 }
 
 .dish-member-btn {
@@ -512,7 +518,7 @@ td.duty-td-restroom.month-passed .duty-btn {
 .change-tooltip {
   position: absolute;
   right: 0;
-  top: calc(100% + 0.2rem);
+  top: calc(100% + 1.2rem);
   min-width: 17rem;
   max-width: 20rem;
   background: #1e2f3a;
