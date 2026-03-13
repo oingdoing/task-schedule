@@ -642,9 +642,52 @@ function noDutyAssignments(slot: ScheduleSlot): DutyAssignments {
 
 interface WeekRotationState {
   hasWednesdayDuty: boolean;
-  hasSnackDuty: boolean;
-  snackIndex: number | null;
   weekdayLeaderIndex: number | null;
+}
+
+type WeeklyDutyIndexSelector = (slot: ScheduleSlot, dutyEnabled: SlotDutyEnabled) => boolean;
+
+function buildWeeklyDutyIndexBySlotId(
+  sorted: ScheduleSlot[],
+  selector: WeeklyDutyIndexSelector,
+): Map<string, number | null> {
+  const dutyIndexByWeek = new Map<string, number>();
+  let nextDutyIndex = 0;
+
+  sorted.forEach((slot) => {
+    if (!slot.hasDuty) {
+      return;
+    }
+
+    const dutyEnabled = normalizeSlotDutyEnabled(slot.dutyEnabled);
+    if (!selector(slot, dutyEnabled)) {
+      return;
+    }
+
+    const weekKey = getWeekKey(slot.date);
+    if (!dutyIndexByWeek.has(weekKey)) {
+      dutyIndexByWeek.set(weekKey, nextDutyIndex);
+      nextDutyIndex += 1;
+    }
+  });
+
+  const dutyIndexBySlotId = new Map<string, number | null>();
+  sorted.forEach((slot) => {
+    if (!slot.hasDuty) {
+      dutyIndexBySlotId.set(slot.id, null);
+      return;
+    }
+
+    const dutyEnabled = normalizeSlotDutyEnabled(slot.dutyEnabled);
+    if (!selector(slot, dutyEnabled)) {
+      dutyIndexBySlotId.set(slot.id, null);
+      return;
+    }
+
+    dutyIndexBySlotId.set(slot.id, dutyIndexByWeek.get(getWeekKey(slot.date)) ?? null);
+  });
+
+  return dutyIndexBySlotId;
 }
 
 function formatTeamWithMembers(teamName: string, teams: Record<string, string[]>): string {
@@ -936,8 +979,6 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     if (!weekStateMap.has(weekKey)) {
       weekStateMap.set(weekKey, {
         hasWednesdayDuty: false,
-        hasSnackDuty: false,
-        snackIndex: null,
         weekdayLeaderIndex: null,
       });
     }
@@ -951,9 +992,6 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     const day = getDayOfWeek(slot.date);
     if (day === DAY_WEDNESDAY) {
       state.hasWednesdayDuty = true;
-    }
-    if (isSnackDay(day) && dutyEnabled.간식) {
-      state.hasSnackDuty = true;
     }
 
     const monthKey = getMonthKey(slot.date);
@@ -971,61 +1009,31 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     weekendBlockKeys.map((k, i) => [k, i]),
   );
 
-  let weeklySnackIndex = 0;
   let weekdayLeaderIndex = 0;
 
   weekStateMap.forEach((state) => {
-    if (state.hasSnackDuty) {
-      state.snackIndex = weeklySnackIndex;
-      weeklySnackIndex += 1;
-    }
-
     if (state.hasWednesdayDuty) {
       state.weekdayLeaderIndex = weekdayLeaderIndex;
       weekdayLeaderIndex += 1;
     }
   });
 
-  const mainDutyWeeks = new Set<string>();
-  sorted.forEach((slot) => {
-    if (!slot.hasDuty) return;
-    const dutyEnabled = normalizeSlotDutyEnabled(slot.dutyEnabled);
-    const hasMainDutyEnabled = dutyEnabled.피청 || dutyEnabled.커청 || dutyEnabled.건청;
-    if (hasMainDutyEnabled) {
-      mainDutyWeeks.add(getWeekKey(slot.date));
-    }
-  });
-
-  const mainDutyIndexByWeek = new Map<string, number>();
-  let mainDutyWeekIndex = 0;
-  mainDutyWeeks.forEach((weekKey) => {
-    mainDutyIndexByWeek.set(weekKey, mainDutyWeekIndex);
-    mainDutyWeekIndex += 1;
-  });
-
-  const mainDutyIndexBySlotId = new Map<string, number | null>();
-  sorted.forEach((slot) => {
-    if (!slot.hasDuty) {
-      mainDutyIndexBySlotId.set(slot.id, null);
-      return;
-    }
-    const dutyEnabled = normalizeSlotDutyEnabled(slot.dutyEnabled);
-    const hasMainDutyEnabled = dutyEnabled.피청 || dutyEnabled.커청 || dutyEnabled.건청;
-    if (!hasMainDutyEnabled) {
-      mainDutyIndexBySlotId.set(slot.id, null);
-      return;
-    }
-    const weekKey = getWeekKey(slot.date);
-    const index = mainDutyIndexByWeek.get(weekKey);
-    mainDutyIndexBySlotId.set(slot.id, index !== undefined ? index : null);
-  });
+  const piDutyIndexBySlotId = buildWeeklyDutyIndexBySlotId(sorted, (_slot, dutyEnabled) => dutyEnabled.피청);
+  const keoDutyIndexBySlotId = buildWeeklyDutyIndexBySlotId(sorted, (_slot, dutyEnabled) => dutyEnabled.커청);
+  const geonDutyIndexBySlotId = buildWeeklyDutyIndexBySlotId(sorted, (_slot, dutyEnabled) => dutyEnabled.건청);
+  const snackDutyIndexBySlotId = buildWeeklyDutyIndexBySlotId(
+    sorted,
+    (slot, dutyEnabled) => isSnackDay(getDayOfWeek(slot.date)) && dutyEnabled.간식,
+  );
 
   let dutyIndex = 0;
   let dishSlotIndex = 0;
   const saturdayDishByWeek = new Map<string, string>();
   const restroomAssignedMonthSet = new Set<string>();
   const sameDateCountMap = new Map<string, number>();
-  const custom2026MainOrderByMainIndex = new Map<number, number>();
+  const custom2026PiOrderByDutyIndex = new Map<number, number>();
+  const custom2026KeoOrderByDutyIndex = new Map<number, number>();
+  const custom2026GeonOrderByDutyIndex = new Map<number, number>();
 
   sorted.forEach((slot) => {
     const weekKey = getWeekKey(slot.date);
@@ -1055,24 +1063,42 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     const isCustom2026Date = slot.date.startsWith(`${CUSTOM_BASE_YEAR}-`);
     const weekState = weekStateMap.get(weekKey);
     const dutyEnabled = normalizeSlotDutyEnabled(slot.dutyEnabled);
-    const mainDutyIndex = mainDutyIndexBySlotId.get(slot.id) ?? null;
+    const piDutyIndex = piDutyIndexBySlotId.get(slot.id) ?? null;
+    const keoDutyIndex = keoDutyIndexBySlotId.get(slot.id) ?? null;
+    const geonDutyIndex = geonDutyIndexBySlotId.get(slot.id) ?? null;
+    const snackDutyIndex = snackDutyIndexBySlotId.get(slot.id) ?? null;
     const sameDateCount = (sameDateCountMap.get(slot.date) ?? 0) + 1;
     sameDateCountMap.set(slot.date, sameDateCount);
-    let custom2026MainWeekOrder: number | null = null;
+    let custom2026PiWeekOrder: number | null = null;
+    let custom2026KeoWeekOrder: number | null = null;
+    let custom2026GeonWeekOrder: number | null = null;
 
-    if (isCustom2026Date && slot.date >= CUSTOM_2026_MAIN_START_DATE && mainDutyIndex !== null) {
-      if (!custom2026MainOrderByMainIndex.has(mainDutyIndex)) {
-        custom2026MainOrderByMainIndex.set(mainDutyIndex, custom2026MainOrderByMainIndex.size);
+    if (isCustom2026Date && slot.date >= CUSTOM_2026_MAIN_START_DATE && piDutyIndex !== null) {
+      if (!custom2026PiOrderByDutyIndex.has(piDutyIndex)) {
+        custom2026PiOrderByDutyIndex.set(piDutyIndex, custom2026PiOrderByDutyIndex.size);
       }
-      custom2026MainWeekOrder = custom2026MainOrderByMainIndex.get(mainDutyIndex)!;
+      custom2026PiWeekOrder = custom2026PiOrderByDutyIndex.get(piDutyIndex)!;
+    }
+    if (isCustom2026Date && slot.date >= CUSTOM_2026_MAIN_START_DATE && keoDutyIndex !== null) {
+      if (!custom2026KeoOrderByDutyIndex.has(keoDutyIndex)) {
+        custom2026KeoOrderByDutyIndex.set(keoDutyIndex, custom2026KeoOrderByDutyIndex.size);
+      }
+      custom2026KeoWeekOrder = custom2026KeoOrderByDutyIndex.get(keoDutyIndex)!;
+    }
+    if (isCustom2026Date && slot.date >= CUSTOM_2026_MAIN_START_DATE && geonDutyIndex !== null) {
+      if (!custom2026GeonOrderByDutyIndex.has(geonDutyIndex)) {
+        custom2026GeonOrderByDutyIndex.set(geonDutyIndex, custom2026GeonOrderByDutyIndex.size);
+      }
+      custom2026GeonWeekOrder = custom2026GeonOrderByDutyIndex.get(geonDutyIndex)!;
     }
 
-    const mainPerson = mainDutyIndex !== null ? pick(main, mainDutyIndex) : NOT_APPLICABLE;
-    const mainPair =
-      mainDutyIndex !== null ? pickPairNonOverlapping(main, mainDutyIndex) : NOT_APPLICABLE;
+    const piPerson = piDutyIndex !== null ? pick(main, piDutyIndex) : NOT_APPLICABLE;
+    const keoPerson = keoDutyIndex !== null ? pick(main, keoDutyIndex) : NOT_APPLICABLE;
+    const geonPair =
+      geonDutyIndex !== null ? pickPairNonOverlapping(main, geonDutyIndex) : NOT_APPLICABLE;
     const snackPerson =
-      weekState && weekState.snackIndex !== null
-        ? pick(snack, getSnackStartOffset(snack) + weekState.snackIndex)
+      snackDutyIndex !== null
+        ? pick(snack, getSnackStartOffset(snack) + snackDutyIndex)
         : NOT_APPLICABLE;
     const weekdayLeader =
       weekState && weekState.weekdayLeaderIndex !== null
@@ -1122,9 +1148,9 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
     }
 
     const assignments: DutyAssignments = {
-      피청: mainDutyIndex !== null ? mainPerson : NOT_APPLICABLE,
-      커청: mainDutyIndex !== null ? mainPerson : NOT_APPLICABLE,
-      건청: mainDutyIndex !== null ? mainPair : NOT_APPLICABLE,
+      피청: piDutyIndex !== null ? piPerson : NOT_APPLICABLE,
+      커청: keoDutyIndex !== null ? keoPerson : NOT_APPLICABLE,
+      건청: geonDutyIndex !== null ? geonPair : NOT_APPLICABLE,
       간식: isSnackDay(day) ? snackPerson : NOT_APPLICABLE,
       본교팀장: isWednesday ? weekdayLeader : weekendLeader,
       설거지: formatTeamWithMembers(dishTeam, data.teams.설거지),
@@ -1155,14 +1181,20 @@ export function computeAssignmentRows(data: ScheduleData): AssignmentRow[] {
         assignments.피청 = '';
         assignments.커청 = '';
         assignments.건청 = '';
-      } else if (custom2026MainWeekOrder !== null) {
-        assignments.피청 = pickFromCustomStart(main, ['김희권'], custom2026MainWeekOrder);
-        assignments.커청 = pickFromCustomStart(main, ['임주현'], custom2026MainWeekOrder);
-        assignments.건청 = pickPairFromCustomStartNonOverlapping(
-          main,
-          ['김보정', '김주팔'],
-          custom2026MainWeekOrder,
-        );
+      } else {
+        if (custom2026PiWeekOrder !== null) {
+          assignments.피청 = pickFromCustomStart(main, ['김희권'], custom2026PiWeekOrder);
+        }
+        if (custom2026KeoWeekOrder !== null) {
+          assignments.커청 = pickFromCustomStart(main, ['임주현'], custom2026KeoWeekOrder);
+        }
+        if (custom2026GeonWeekOrder !== null) {
+          assignments.건청 = pickPairFromCustomStartNonOverlapping(
+            main,
+            ['김보정', '김주팔'],
+            custom2026GeonWeekOrder,
+          );
+        }
       }
     }
 

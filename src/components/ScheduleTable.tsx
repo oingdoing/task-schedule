@@ -36,8 +36,8 @@ interface DutyMergeMeta {
 
 const MERGEABLE_DUTIES: DutyType[] = ['피청', '커청', '건청', '간식', '본교팀장'];
 
-/** 주간 단위 담당: 빈 행 건너뛰고 병합 (피청·커청·건청·간식) */
-const MERGE_ACROSS_EMPTY_DUTIES: DutyType[] = ['피청', '커청', '건청', '간식'];
+/** 주간 단위 담당: 빈 행 건너뛰고 병합 (피청·커청·간식) */
+const MERGE_ACROSS_EMPTY_DUTIES: DutyType[] = ['피청', '커청', '간식'];
 
 function isMergeCandidate(row: AssignmentRow, duty: DutyType): boolean {
   if (!row.slot.hasDuty) {

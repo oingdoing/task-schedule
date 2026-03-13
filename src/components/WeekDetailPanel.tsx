@@ -13,11 +13,51 @@ function getDayOfWeek(date: string): number {
   return new Date(year, month - 1, day).getDay();
 }
 
+function isVisibleDutyValue(value: string): boolean {
+  return !!value && value !== '-' && !value.startsWith('당번 없음');
+}
+
+function formatShortDate(date: string): string {
+  const [, month, day] = date.split('-');
+  return `${Number(month)}/${Number(day)}`;
+}
+
 function firstNonEmpty(rows: AssignmentRow[], duty: DutyType): string {
-  const found = rows
-    .map((row) => row.assignments[duty])
-    .find((value) => !!value && value !== '-' && !value.startsWith('당번 없음'));
+  const found = rows.map((row) => row.assignments[duty]).find(isVisibleDutyValue);
   return found ?? '';
+}
+
+function buildPartialDutyLine(rows: AssignmentRow[], duty: DutyType, label: string): string {
+  const entries = rows
+    .filter((row) => row.slot.hasDuty)
+    .map((row) => ({
+      date: row.slot.date,
+      value: row.assignments[duty],
+    }));
+
+  if (entries.length === 0) {
+    return '';
+  }
+
+  const hasVisibleValue = entries.some((entry) => isVisibleDutyValue(entry.value));
+  if (!hasVisibleValue) {
+    return '';
+  }
+
+  const visibleValues = entries.filter((entry) => isVisibleDutyValue(entry.value));
+  const uniqueVisibleValues = [...new Set(visibleValues.map((entry) => entry.value))];
+  const hasHiddenGap = entries.some((entry) => !isVisibleDutyValue(entry.value));
+
+  if (!hasHiddenGap && uniqueVisibleValues.length === 1) {
+    return `${label}:${uniqueVisibleValues[0]}`;
+  }
+
+  const formatted = entries
+    .map((entry) =>
+      `${formatShortDate(entry.date)} ${isVisibleDutyValue(entry.value) ? entry.value : '없음'}`,
+    )
+    .join(' / ');
+  return `${label}: ${formatted}`;
 }
 
 function buildWeekSummaryLines(rows: AssignmentRow[]): string[] {
@@ -57,11 +97,11 @@ function buildWeekSummaryLines(rows: AssignmentRow[]): string[] {
   }
   const mainLine = mainLineParts.join(' / ');
 
-  const geon = firstNonEmpty(rows, '건청');
+  const geonLine = buildPartialDutyLine(rows, '건청', '건청');
   const snack = firstNonEmpty(rows, '간식');
   const pairLineParts: string[] = [];
-  if (geon) {
-    pairLineParts.push(`건청:${geon}`);
+  if (geonLine) {
+    pairLineParts.push(geonLine);
   }
   if (snack) {
     pairLineParts.push(`간식:${snack}`);
