@@ -449,6 +449,7 @@ td.duty-td-restroom.month-passed .duty-btn {
 }
 .team-member-list:has(.dish-member-text){
   display: block;
+  width: 100%;
 }
 
 .dish-member-btn {
