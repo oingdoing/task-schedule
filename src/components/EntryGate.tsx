@@ -3,13 +3,11 @@ import { useState } from 'react';
 interface EntryGateProps {
   onCodeSubmit: (code: string) => Promise<void>;
   error: string | null;
-  onOpenAdminModal: () => void;
 }
 
 export default function EntryGate({
   onCodeSubmit,
   error,
-  onOpenAdminModal,
 }: EntryGateProps) {
   const [input, setInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -46,14 +44,6 @@ export default function EntryGate({
             {submitting ? '확인 중...' : '입장'}
           </button>
         </form>
-        <button
-          type="button"
-          className="entry-gate-admin-link"
-          onClick={onOpenAdminModal}
-          disabled={submitting}
-        >
-          관리자로 입장하기
-        </button>
       </div>
     </div>
   );

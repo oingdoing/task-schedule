@@ -9,7 +9,6 @@ import EditRosterModal from './components/EditRosterModal';
 import SubstituteModal from './components/SubstituteModal';
 import ConfirmCodeModal from './components/ConfirmCodeModal';
 import EntryGate from './components/EntryGate';
-import AdminCodeModal from './components/AdminCodeModal';
 import UsageGuideModal from './components/UsageGuideModal';
 import ViewRosterModal from './components/ViewRosterModal';
 import { useSwapMode } from './hooks/useSwapMode';
@@ -259,7 +258,6 @@ type AccessRole = 'editor' | 'admin';
 export default function App() {
   const [accessState, setAccessState] = useState<{ role: AccessRole } | null>(null);
   const [entryError, setEntryError] = useState<string | null>(null);
-  const [isAdminCodeModalOpen, setAdminCodeModalOpen] = useState(false);
   const [data, setData] = useState<ScheduleData>(() => baseData());
   const [currentYear, setCurrentYear] = useState<number>(() => getInitialYear(baseData()));
   const [searchQuery, setSearchQuery] = useState('');
@@ -634,7 +632,7 @@ export default function App() {
     tryAcquireAndRun(async () => {
       const newData: ScheduleData = {
         ...data,
-        changeLog: data.changeLog.slice(0, index),
+        changeLog: data.changeLog.filter((log: ChangeLogEntry) => log.id !== id),
       };
       setData(newData);
       skipNextSaveRef.current = true;
@@ -718,12 +716,6 @@ export default function App() {
         <EntryGate
           onCodeSubmit={handleGrantAccess}
           error={entryError}
-          onOpenAdminModal={() => setAdminCodeModalOpen(true)}
-        />
-        <AdminCodeModal
-          isOpen={isAdminCodeModalOpen}
-          onCodeSubmit={handleGrantAccess}
-          onClose={() => setAdminCodeModalOpen(false)}
         />
         <UsageGuideModal isOpen={isUsageGuideOpen} onClose={() => setUsageGuideOpen(false)} />
         <ViewRosterModal
